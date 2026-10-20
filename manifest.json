@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "purpose": "Standalone local notification wrapper",
+  "purpose": "Coura: local notification courier for AI agents",
   "license": "MIT",
   "python_minimum": "3.10",
   "dependencies": [
@@ -20,6 +20,26 @@
       "sha256": "fad31060e9b100af516e2ff31817fd6fb158cb497ca6088f766ab33ba9aff8c1"
     },
     {
+      "path": "assets/coura.gif",
+      "bytes": 872972,
+      "sha256": "d4bdc46b1af25cff42e83840ad79b98fa1e5488025f03a256a4e1f660dafa6cb"
+    },
+    {
+      "path": "assets/coura.png",
+      "bytes": 1457936,
+      "sha256": "8a559d2d175e30f5663d1b71314226a870008eda4b781e25cc5a71e6c49bd817"
+    },
+    {
+      "path": "courier.py",
+      "bytes": 25268,
+      "sha256": "9ac1987a73e7c890f1a801923b696ed912fc5e9ff683da0d50d8f20e5cdc173c"
+    },
+    {
+      "path": "example.json",
+      "bytes": 258,
+      "sha256": "e1396b10a1193e8312ff719c328770ee8e3c0d5d65b6378c7c3ea14c86d9778d"
+    },
+    {
       "path": "LICENSE",
       "bytes": 1061,
       "sha256": "509f2c4068e339d5782ea8c7a968bb16a289348053343a9f5d14c0550703412c"
@@ -31,23 +51,13 @@
     },
     {
       "path": "README.md",
-      "bytes": 11329,
-      "sha256": "6ed800063128e5cd65cdf212e56826cfeec9ba9701e71471b33cb0d06d3f35ec"
+      "bytes": 11478,
+      "sha256": "ce316d41d27aae6dbdde5906f2eca3d637b9087811aacdde6f1c9cf19bb74dad"
     },
     {
       "path": "REPOSITORY-PACKAGE.md",
       "bytes": 1823,
       "sha256": "da8d252297a08064bd438be59f2e35394e51d72a04b0f14522fd77c6a6ebf3e0"
-    },
-    {
-      "path": "courier.py",
-      "bytes": 25268,
-      "sha256": "9ac1987a73e7c890f1a801923b696ed912fc5e9ff683da0d50d8f20e5cdc173c"
-    },
-    {
-      "path": "example.json",
-      "bytes": 258,
-      "sha256": "e1396b10a1193e8312ff719c328770ee8e3c0d5d65b6378c7c3ea14c86d9778d"
     },
     {
       "path": "tests/check_offline.py",

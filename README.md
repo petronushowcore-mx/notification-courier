@@ -1,4 +1,12 @@
-# Local notification courier
+# Coura
+
+**Local Notification Courier for AI Agents**
+
+by MxBv
+
+![Coura, a running pixel-art chicken courier with a backpack](assets/coura.gif)
+
+[Static cover](assets/coura.png)
 
 Send a short notification when a result is ready. The courier resolves a named
 recipient, selects a transport and records what that transport actually reports. It does
