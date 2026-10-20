@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "purpose": "Standalone local notification wrapper",
+  "license": "MIT",
+  "python_minimum": "3.10",
+  "dependencies": [
+    "Python standard library",
+    "Optional user-configured queue executable",
+    "Optional user-supplied authorised urgent adapter"
+  ],
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 19,
+      "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 32,
+      "sha256": "fad31060e9b100af516e2ff31817fd6fb158cb497ca6088f766ab33ba9aff8c1"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1061,
+      "sha256": "509f2c4068e339d5782ea8c7a968bb16a289348053343a9f5d14c0550703412c"
+    },
+    {
+      "path": "LIMITS.md",
+      "bytes": 10439,
+      "sha256": "400f3ec5ef048ff19d88e05aeb457041350763cfa7ce02772291a1cb16be10b8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 11329,
+      "sha256": "6ed800063128e5cd65cdf212e56826cfeec9ba9701e71471b33cb0d06d3f35ec"
+    },
+    {
+      "path": "REPOSITORY-PACKAGE.md",
+      "bytes": 1823,
+      "sha256": "da8d252297a08064bd438be59f2e35394e51d72a04b0f14522fd77c6a6ebf3e0"
+    },
+    {
+      "path": "courier.py",
+      "bytes": 25268,
+      "sha256": "9ac1987a73e7c890f1a801923b696ed912fc5e9ff683da0d50d8f20e5cdc173c"
+    },
+    {
+      "path": "example.json",
+      "bytes": 258,
+      "sha256": "e1396b10a1193e8312ff719c328770ee8e3c0d5d65b6378c7c3ea14c86d9778d"
+    },
+    {
+      "path": "tests/check_offline.py",
+      "bytes": 103949,
+      "sha256": "bf4b501eb01d77bf1a0c01dc6d6d2ac69d6b4138f8f07ee764c1518eaaa631e5"
+    }
+  ]
+}

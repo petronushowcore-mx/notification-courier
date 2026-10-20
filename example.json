@@ -1,0 +1,13 @@
+{
+  "state_dir": "./local-state",
+  "recipients": {
+    "writer": {
+      "client": "claude",
+      "id": "00000000-0000-0000-0000-000000000001"
+    },
+    "reviewer": {
+      "client": "codex",
+      "id": "00000000-0000-0000-0000-000000000002"
+    }
+  }
+}
