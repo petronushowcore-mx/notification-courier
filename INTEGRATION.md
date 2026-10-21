@@ -3,7 +3,83 @@
 Start with the local example in [README.md](README.md). The same configuration is
 shared by the sender and consumer. Set `state_dir` to a trusted local directory;
 relative paths resolve beside the configuration file. Register each recipient
-explicitly with a full lowercase UUID.
+explicitly. Built-in Claude/Codex IDs are full lowercase UUIDs; configured kinds
+use bounded exact local IDs.
+
+## Configured endpoints
+
+Register a new kind explicitly, with an exact local ID:
+
+```json
+{
+  "state_dir": "./local-state",
+  "transports": {"worker": {"type": "inbox"}},
+  "recipients": {"writer": {"client": "worker", "id": "writer"}}
+}
+```
+
+This is `example-generic.json`. New kinds use `[a-z][a-z0-9_-]{0,31}`;
+IDs use `[A-Za-z0-9][A-Za-z0-9_.-]{0,127}`. Address them by alias or exact
+`kind:id`. No prefix discovery is provided for these IDs. Built-in `claude`
+and `codex` cannot be overridden.
+
+The inbox stores opaque bytes. `show` emits `{"messages": [...]}`, not Claude
+hook context; each row contains `ts`, `recipient`, `attempt` and a base64
+`payload`. No ring file is written for this inbox. A receiving application must
+consume and interpret that data itself. `watch`/`show` are available only for
+file-inbox routes; a command receiver owns its own downstream consumption.
+
+Send exact file bytes (1..6144 bytes):
+
+```sh
+python -c "from pathlib import Path; Path('example-payload.bin').write_bytes(b'result reference')"
+python courier.py --config example-generic.json send-data writer --key demo/bytes --file example-payload.bin
+python courier.py --config example-generic.json show writer
+```
+
+`send` still carries the ordinary `Check KEY from SENDER. NOTE` text, encoded
+as UTF-8 on a configured route. Both entry points share the same recipient/key
+hold. Changing the payload, alias or mode does not make a held key reusable.
+
+For a compatible installed receiver, replace the inbox definition:
+
+```json
+"worker": {
+  "type": "command",
+  "command": ["/absolute/path/to/receiver", "receive"],
+  "timeout": 30,
+  "receipt_status": "STORED",
+  "data_only": false
+}
+```
+
+The executable receives one UTF-8 JSON object on stdin, with exactly these fields:
+
+```json
+{"recipient":{"kind":"worker","id":"writer"},"attempt":"00000000000000000000000000000000","payload":"cmVzdWx0IHJlZmVyZW5jZQ=="}
+```
+
+The example attempt is synthetic; each real call has a fresh 32-character lowercase
+hex attempt. The receiver must exit successfully and return one JSON object on
+stdout with exactly `status`, `recipient` and `attempt`. Echo the full recipient
+and current attempt unchanged. The status must match the configured
+`receipt_status` (`STORED`, `QUEUED` or `THREAD_ACCEPTED`). For example:
+
+```json
+{"status":"STORED","recipient":{"kind":"worker","id":"writer"},"attempt":"00000000000000000000000000000000"}
+```
+
+Duplicate keys, extra fields/output, a mismatched echo, nonzero exit or timeout
+produce a held uncertain outcome. stdout and stderr are each limited to 8192 bytes;
+stderr is not parsed as an acknowledgement on this protocol. The default timeout
+is 30 seconds, with an upper bound of 120. Fixed argv avoids shell interpolation;
+the configured executable is still trusted code.
+
+`data_only: true` declares that the receiver has a separate data path. It permits
+`send-data ... --data-only`; it does not inspect the host or enforce isolation.
+The ordinary file-inbox example does not declare this capability. Never set the
+flag merely to make a check pass. Coura alone does not authenticate messages or
+make text safe to place in a model prompt.
 
 ## Claude Code
 
@@ -112,7 +188,7 @@ print(receipt.as_dict())
 A host may supply `queue` or `urgent` callables to `Courier`. There is no bundled
 native IPC implementation or stable native API promise.
 
-A supplied adapter receives `(target, notice, requested)`. It must authenticate
+A legacy `queue`/`urgent` callable receives `(target, notice, requested)`. It must authenticate
 through its own host, verify current runtime authority, call `requested()`
 exactly once immediately before dispatch, and return an exact `Receipt` with
 plain string fields and the exact receiver ID. The core checks the receipt
@@ -123,14 +199,21 @@ inconsistent receipt or missing acknowledgement does not release it. Read
 [LIMITS.md](LIMITS.md) before writing adapters or investigating uncertain attempts.
 Never discover another session's private IPC endpoint or borrow its identity.
 
+A new configured binding is an `Adapter(transport, frozenset(capabilities),
+receipt_status)` passed in `Courier(..., adapters={"worker": binding})`. Its
+callable receives `(target, payload_bytes, requested, attempt)` and returns a
+`Receipt` with the exact recipient ID, `recipient_kind` and `attempt_id`.
+Use ordinary strings for capabilities (`notification`, `data`, `data_only`).
+These are trusted local bindings, not a stable plugin API or a sandbox.
+
 ## Addresses and local state
 
-Recipients may be addressed by alias, exact `client:UUID`, or an unambiguous
+Built-in recipients may be addressed by alias, exact `client:UUID`, or an unambiguous
 lowercase UUID prefix of at least eight characters. An optional `claude:` or
 `codex:` prefix selects the client. Self suppression in a Python host compares
 both the client and full identity supplied by that host.
 
-The inbox uses JSON-lines letters, a numeric offset and an identity sidecar.
+The legacy Claude inbox uses JSON-lines letters, a numeric offset and an identity sidecar.
 A `.ring` file is written for compatibility with external host consumers.
 The standalone `watch` command reads unread inbox content; it does not read
 the ring. Do not delete companion lock files while a producer or consumer is

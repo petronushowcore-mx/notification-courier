@@ -1,0 +1,14 @@
+{
+  "state_dir": "./local-state",
+  "transports": {
+    "worker": {
+      "type": "inbox"
+    }
+  },
+  "recipients": {
+    "writer": {
+      "client": "worker",
+      "id": "writer"
+    }
+  }
+}

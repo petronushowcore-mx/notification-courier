@@ -4,88 +4,92 @@
 
 by MxBv
 
-Pass a result-ready note from one local agent session to another, and keep a durable
-record of the delivery attempt. Coura suppresses repeated sends with the same
-recipient/key, including attempts whose outcome is uncertain.
+Deliver a result-ready note or a small data payload between local agent sessions.
+Coura adds one explicit recipient registry, a durable attempt journal and shared
+recipient/key replay holds around configured transports. No model runs in the
+delivery path.
 
 ## Why use it?
 
-You run Claude Code and Codex side by side. One session saves a result; another
-needs its reference so it can continue. Copying the same message between terminals
-is tedious, and retrying after a timeout can send it twice.
+One agent saves a result; another CLI session needs its reference to continue.
+Copying between terminals is tedious, and retrying after a timeout can repeat an
+attempt that already reached the receiver.
 
-Coura provides a small shared delivery layer for that workflow:
+Coura connects that workflow through a local file inbox or an executable you
+configure. Claude Code and Codex-compatible transports are included; another CLI
+can participate through the documented stdin/JSON protocol or a trusted Python
+adapter. Each endpoint needs a compatible receiver: this is not automatic support
+for every installed CLI.
 
-- Explicit recipient names mapped to session IDs.
-- A local Claude inbox, or a configured Codex-compatible queue command.
-- A journal that keeps uncertain attempts held for inspection.
-- No language model, database server or MCP service in the delivery path.
+`agent saves result → Coura carries its reference → receiving application handles it`
 
-`agent saves result → Coura sends its reference → recipient receives a note`
+Keep the result in your application. Coura carries a note or bounded bytes, keeps
+uncertain attempts held for inspection, and does not claim that a recipient read
+or acted on them.
 
-Keep the actual result in your application. Coura carries a short reference and
-notice; it does not store the result or prove that the recipient read it.
-
-If your host's built-in messaging already covers your workflow, use that. Coura
-adds a shared local registry and delivery journal around supported transports.
-For searchable conversations, a web inbox and a broader coordination service,
-consider [MCP Agent Mail](https://github.com/Dicklesworthstone/mcp_agent_mail).
-Coura deliberately has a smaller scope.
+If your host's built-in messaging covers your workflow, use that. Coura is useful
+when several local tools need the same registry and delivery history. For a web
+inbox, search and a broader coordination service, see
+[MCP Agent Mail](https://github.com/Dicklesworthstone/mcp_agent_mail).
 
 ## Try it locally
 
-Python 3.10 or newer. The example needs no account, model or network service.
-Run from source; there is currently no PyPI package or automatic installer.
+Python 3.10 or newer; standard library only. This example needs no account, model
+or network service after cloning. Run from source; there is no PyPI package or
+automatic installer.
 
 ```sh
 git clone https://github.com/petronushowcore-mx/notification-courier.git
 cd notification-courier
-python courier.py --config example.json send writer --key demo/result --sender researcher --note "Draft saved; please review."
-python courier.py --config example.json watch writer --timeout 0
-python courier.py --config example.json show writer
+python courier.py --config example-generic.json send writer --key demo/result --sender researcher --note "Draft saved; please review."
+python courier.py --config example-generic.json watch writer --timeout 0
+python courier.py --config example-generic.json show writer
 ```
 
-You should see `STORED`, then `MAIL_READY`, then hook JSON containing the note.
-Run the send again with the same key: it returns `SKIPPED`. Use a new key for a
-new result. The example uses synthetic identities and writes only to
+Expect `STORED`, then `MAIL_READY`, then JSON with a `messages` array. Its
+`payload` fields contain base64-encoded bytes. Send the same recipient/key again:
+it returns `SKIPPED`. Use a new key for a new result. This example writes only to
 `local-state/`; it does not contact an agent application.
+
+For the Claude hook-shaped output, run the same commands with `example.json`.
+The examples use synthetic identities.
 
 ## Connect your sessions
 
-Replace the example's synthetic IDs with your actual session IDs. Keep the
-configuration and state directory private.
+Keep configuration and state private. Configure each route explicitly:
 
-- **Claude Code:** [copy a prompt-hook configuration](INTEGRATION.md#claude-code).
-  The hook reads letters when you submit a prompt. Idle-session wake needs a
-  separate host-managed watcher; the hook alone does not provide it.
-- **Codex:** [configure a compatible queue executable](INTEGRATION.md#codex).
-  CLI availability and permissions depend on your installation; the local
-  example does not validate them.
-- **Python:** [use the core or provide a trusted adapter](INTEGRATION.md#python).
+- [Other CLIs and data payloads](INTEGRATION.md#configured-endpoints): file inbox
+  and command protocol, including a runnable byte-payload example.
+- [Claude Code](INTEGRATION.md#claude-code): copy a prompt-hook configuration.
+  The hook consumes mail on a prompt; idle wake needs a separate host integration.
+- [Codex](INTEGRATION.md#codex): select a compatible queue executable. Its actual
+  availability and permissions depend on your installation.
+- [Python](INTEGRATION.md#python): import the core or supply a trusted adapter.
 
 ## Trust and failure boundaries
 
-**Messages can contain prompt-injection instructions.** Only connect trusted local
-producers. A recipient name identifies a route, not authority to issue commands.
-Queued messages and hook context enter the receiving agent's conversation;
-Coura does not sanitise them into safe instructions. See [SECURITY.md](SECURITY.md).
+**Messages can contain prompt-injection instructions.** A route name is not
+sender authentication or permission to issue commands. Hook context and queued
+input can enter a model's conversation. Opaque bytes and the optional `data_only`
+capability do not make a receiver safe; that flag is a local declaration, not a
+verified isolation mechanism. See [SECURITY.md](SECURITY.md).
 
-A timed-out send can have reached its recipient. Coura keeps the key held instead
-of retrying automatically. This trades automatic recovery for avoiding a repeated
-attempt; it is not an exactly-once delivery guarantee.
+A timed-out send may have reached its recipient. Coura holds that key instead of
+retrying automatically. This is not an exactly-once delivery guarantee.
 
-Before upgrading, stop old producers sharing the state directory. Preserve journal
-rows and lock files. Native Windows operation has additional portability limits.
-Read [LIMITS.md](LIMITS.md) for receipt meanings, concurrency and recovery boundaries.
+Before upgrading, stop old producers sharing the state directory and preserve
+journal rows and lock files. Read [LIMITS.md](LIMITS.md) for receipt meanings,
+concurrency, native Windows and recovery boundaries.
 
 ## Check it
 
 ```sh
 python tests/check_offline.py
+python tests/check_configured.py --mutations
 ```
 
-This runs local file and CLI checks, simulated transports and regression mutations.
-It does not certify an installed host, wake mechanism or recipient reading.
+The checks use local files, synthetic transports and child processes. They do not
+certify an installed agent application, host wake or recipient reading.
 
 MIT licensed. [Package contents](REPOSITORY-PACKAGE.md) ·
 [Transport integration](INTEGRATION.md) · [Security](SECURITY.md)

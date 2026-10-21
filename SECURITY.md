@@ -20,6 +20,15 @@ Coura does not judge message content, authenticate the claimed sender, validate
 the referenced result, or remove prompt injection. Transport receipt validation,
 JSON encoding and `shell=False` do not solve that model-level problem.
 
+## Data paths are not a security mode
+
+Configured endpoints can carry opaque bytes instead of producing hook context.
+This separates a data representation from notification text; it does not enforce
+what the receiving process does with those bytes. The `data_only` capability is
+a trusted local declaration. Coura does not verify host isolation, register keys,
+check signed authority or provide an anti-injection execution boundary. Do not
+forward arbitrary payloads into a model prompt and call that a safe data path.
+
 ## Protect configuration and state
 
 Anyone able to write `state_dir` can forge messages or change delivery history.

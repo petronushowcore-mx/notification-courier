@@ -1,19 +1,20 @@
 # Repository package
 
-This package contains a standalone notification wrapper, a synthetic local
-example, an MIT licence and local checks.
+This package contains a standalone notification/data courier, synthetic local
+examples, an MIT licence and local checks.
 
 The reusable mechanism is: resolve a recipient in an explicit registry, compare
 canonical client/full identities for self suppression, reserve a delivery in an
 append-only journal, dispatch through a selected adapter and preserve its actual
-receipt. Local inbox writes are followed by a ring; the consumer shows only complete
-unread records.
+receipt. Legacy Claude inbox writes are followed by a ring; configured inboxes
+store opaque bytes without a ring. Consumers show only complete unread records.
 
 ## Dependencies
 
 | Component | Dependency |
 |---|---|
 | Core, local inbox, show/watch, offline check | Python standard library; declared minimum Python 3.10 |
+| Configured endpoint | Explicit file inbox or installed stdin/JSON-compatible receiver |
 | Optional queue | User-configured installed Codex CLI or compatible executable |
 | Optional urgent | User-supplied authenticated host adapter; no native IPC code included |
 | Idle chat wake | Host background-task completion and prompt-hook integration |
@@ -33,6 +34,10 @@ establish real delivery or host acceptance.
 
 `manifest.json` lists the package files and content digests. The manifest excludes
 itself to avoid a circular digest.
+
+Run `python tests/check_configured.py --mutations` for configured kinds, bounded
+byte payloads, full-address/attempt acknowledgements and their regression cases.
+No installed third-party agent application is required.
 
 See [README.md](README.md) for usage and [LIMITS.md](LIMITS.md) for declared ceilings.
 

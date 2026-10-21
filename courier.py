@@ -4,10 +4,11 @@ The file inbox and command adapter are runnable. A native urgent transport is
 an optional host-supplied callable; no application IPC code is bundled.
 """
 import argparse
+import base64
 import errno
 import hashlib
 import math
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import uuid
 import json
 import os
@@ -22,6 +23,10 @@ from pathlib import Path
 
 ID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 PREFIX = re.compile(r"[0-9a-f][0-9a-f-]{7,35}")
+KIND = re.compile(r"[a-z][a-z0-9_-]{0,31}")
+ENDPOINT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+MAX_DATA = 6144
+MAX_DATA_RECORD = 16384
 MAX_RECORD = 8192
 MAX_BATCH = 64
 TERMINAL = {"STORED", "QUEUED", "THREAD_ACCEPTED", "REFUSED", "OUTCOME_UNKNOWN"}
@@ -41,8 +46,13 @@ class Address:
     identity: str
 
     def __post_init__(self):
-        if self.client not in ("claude", "codex") or not ID.fullmatch(self.identity):
-            raise Refused("Address requires a supported client and a full lowercase UUID")
+        if type(self.client) is not str or type(self.identity) is not str:
+            raise Refused("Address fields must be strings")
+        if self.client in ("claude", "codex"):
+            if not ID.fullmatch(self.identity):
+                raise Refused("Legacy address requires a full lowercase UUID")
+        elif not KIND.fullmatch(self.client) or not ENDPOINT_ID.fullmatch(self.identity):
+            raise Refused("Configured address needs a bounded kind and a safe local id")
 
 
 @dataclass(frozen=True)
@@ -52,11 +62,18 @@ class Receipt:
     recipient_id: str = None
     queue_item_id: str = None
     held_status: str = None
+    recipient_kind: str = None
+    attempt_id: str = None
 
     def as_dict(self):
-        return dict(status=self.status, detail=self.detail,
-                    recipient_id=self.recipient_id, queue_item_id=self.queue_item_id,
-                    held_status=self.held_status, read="UNMEASURED")
+        result = dict(status=self.status, detail=self.detail,
+                      recipient_id=self.recipient_id, queue_item_id=self.queue_item_id,
+                      held_status=self.held_status, read="UNMEASURED")
+        if self.recipient_kind is not None:
+            result["recipient_kind"] = self.recipient_kind
+        if self.attempt_id is not None:
+            result["attempt_id"] = self.attempt_id
+        return result
 
 
 def failure_detail(error):
@@ -115,15 +132,15 @@ def file_lock(path):
         os.close(fd)
 
 
-def encoded_record(row):
+def encoded_record(row, limit=MAX_RECORD):
     encoded = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
-    if len(encoded) > MAX_RECORD:
-        raise Refused("Record exceeds 8192 bytes")
+    if len(encoded) > limit:
+        raise Refused("Record exceeds %s bytes" % limit)
     return encoded
 
 
-def append_record(path, row):
-    encoded = encoded_record(row)
+def append_record(path, row, limit=MAX_RECORD):
+    encoded = encoded_record(row, limit)
     with file_lock(path):
         fd = os.open(str(path), os.O_RDWR | os.O_CREAT | os.O_APPEND |
                      getattr(os, "O_BINARY", 0), 0o600)
@@ -182,8 +199,14 @@ def blocked(rows, target, key):
 class Inbox:
     """Legacy letters/ring/numeric offset plus a bound identity sidecar."""
 
+    record_limit = MAX_RECORD
+
     def __init__(self, state):
         self.root = Path(state) / "inbox"
+
+    @staticmethod
+    def valid_row(row, target):
+        return isinstance(row, dict) and isinstance(row.get("line"), str)
 
     def paths(self, target):
         if target.client != "claude":
@@ -237,13 +260,13 @@ class Inbox:
                 raise Refused("Inbox identity or consumed prefix changed")
             stream.seek(start)
             while len(letters) < MAX_BATCH:
-                raw = stream.readline(MAX_RECORD + 1)
-                if len(raw) > MAX_RECORD:
+                raw = stream.readline(self.record_limit + 1)
+                if len(raw) > self.record_limit:
                     raise Refused("Oversized inbox record")
                 if not raw or not raw.endswith(b"\n"):
                     break
                 row = json.loads(raw.decode("utf-8"))
-                if not isinstance(row, dict) or not isinstance(row.get("line"), str):
+                if not self.valid_row(row, target):
                     raise Refused("Invalid inbox record")
                 letters.append(row)
                 end = stream.tell()
@@ -300,11 +323,18 @@ class Inbox:
                 raise Refused("Invalid watch interval") from None
 
 
-def run_command(command, timeout):
+def run_command(command, timeout, input_bytes=None):
     """Wait for the direct child, with file output rather than descendant pipes."""
-    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+    if input_bytes is not None and (type(input_bytes) is not bytes or len(input_bytes) > MAX_DATA_RECORD):
+        raise Refused("Invalid bounded command input")
+    input_context = (tempfile.TemporaryFile() if input_bytes is not None else
+                     nullcontext(subprocess.DEVNULL))
+    with input_context as source, tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+        if input_bytes is not None:
+            source.write(input_bytes)
+            source.seek(0)
         try:
-            process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
+            process = subprocess.Popen(command, stdin=source,
                                        stdout=stdout, stderr=stderr, shell=False)
         except OSError as error:
             raise NotStarted("Command not started: " + str(error)) from error
@@ -317,6 +347,22 @@ def run_command(command, timeout):
         stdout.seek(0)
         stderr.seek(0)
         return code, stdout.read(MAX_RECORD + 1), stderr.read(MAX_RECORD + 1)
+
+
+def command_prefix(command):
+    """Resolve a configured executable without invoking a command shell."""
+    command = list(command)
+    executable = shutil.which(command[0]) or command[0]
+    name = Path(executable).name.lower().rstrip(" .")
+    if os.name == "nt" and name != Path(executable).name.lower():
+        raise Refused("Ambiguous Windows executable name")
+    command[0] = str(Path(executable).resolve())
+    if name in {"cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe",
+                "bash", "bash.exe", "sh", "sh.exe"}:
+        raise Refused("Shell interpreters need a separately authorised adapter")
+    if os.name == "nt" and Path(executable).suffix.lower() in (".cmd", ".bat"):
+        raise Refused("Windows batch wrappers need a separately authorised adapter")
+    return command
 
 
 class CodexQueue:
@@ -338,16 +384,7 @@ class CodexQueue:
             raise Refused("Queue notice must be a NUL-free string")
         command = list(self.command)
         if self.runner is run_command:
-            executable = shutil.which(command[0]) or command[0]
-            name = Path(executable).name.lower().rstrip(" .")
-            if os.name == "nt" and name != Path(executable).name.lower():
-                raise Refused("Ambiguous Windows executable name")
-            command[0] = str(Path(executable).resolve())
-            if name in {"cmd", "cmd.exe", "powershell", "powershell.exe",
-                        "pwsh", "pwsh.exe", "bash", "bash.exe", "sh", "sh.exe"}:
-                raise Refused("Shell interpreters need a separately authorised adapter")
-            if os.name == "nt" and Path(executable).suffix.lower() in (".cmd", ".bat"):
-                raise Refused("Windows batch wrappers need a separately authorised adapter")
+            command = command_prefix(command)
         requested()
         runner = self.runner
         default_runner = runner is run_command
@@ -378,21 +415,144 @@ class CodexQueue:
             raise
 
 
+@dataclass(frozen=True)
+class Adapter:
+    """Trusted local binding; capabilities alone do not prove receiver isolation."""
+    transport: object
+    capabilities: frozenset
+    receipt_status: str = "STORED"
+
+    def __post_init__(self):
+        if (not callable(self.transport) or type(self.capabilities) is not frozenset or
+                any(type(item) is not str for item in self.capabilities) or
+                not self.capabilities <= {"notification", "data", "data_only"} or
+                self.receipt_status not in {"STORED", "QUEUED", "THREAD_ACCEPTED"}):
+            raise Refused("Invalid adapter binding")
+
+
+class DataInbox(Inbox):
+    """Opaque bytes with the existing cursor discipline; never emits hook context."""
+    record_limit = MAX_DATA_RECORD
+
+    def __init__(self, state):
+        self.root = Path(state) / "data-inbox"
+
+    def paths(self, target):
+        key = hashlib.sha256(json.dumps([target.client, target.identity],
+            ensure_ascii=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        return {part: self.root / (key + "." + part)
+                for part in ("jsonl", "offset", "identity")}
+
+    @staticmethod
+    def valid_row(row, target):
+        if (type(row) is not dict or set(row) != {"ts", "recipient", "attempt", "payload"} or
+                row["recipient"] != {"kind": target.client, "id": target.identity} or
+                type(row["attempt"]) is not str or
+                re.fullmatch(r"[0-9a-f]{32}", row["attempt"]) is None or
+                type(row["ts"]) is not str or type(row["payload"]) is not str):
+            return False
+        try:
+            payload = base64.b64decode(row["payload"], validate=True)
+        except (ValueError, UnicodeError):
+            return False
+        return 0 < len(payload) <= MAX_DATA
+
+    def __call__(self, target, payload, requested, attempt):
+        if type(payload) is not bytes or not 0 < len(payload) <= MAX_DATA:
+            raise Refused("Data payload must contain 1..6144 bytes")
+        row = dict(ts=now(), recipient={"kind": target.client, "id": target.identity},
+                   attempt=attempt, payload=base64.b64encode(payload).decode("ascii"))
+        encoded_record(row, MAX_DATA_RECORD)
+        requested()
+        append_record(self.paths(target)["jsonl"], row, MAX_DATA_RECORD)
+        return Receipt("STORED", "Opaque data stored; receiver handling is separate",
+                       target.identity, recipient_kind=target.client, attempt_id=attempt)
+
+    def show(self, target, out=None):
+        out = sys.stdout if out is None else out
+        paths = self.paths(target)
+        with file_lock(paths["offset"]):
+            rows, end, identity = self._unread(target)
+            if not rows:
+                return 0
+            out.write(json.dumps({"messages": rows}, ensure_ascii=True) + "\n")
+            out.flush()
+            self.save_cursor(paths["identity"], json.dumps(identity))
+            self.save_cursor(paths["offset"], str(end))
+            return len(rows)
+
+
+def unique_object(pairs):
+    result = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError("Duplicate JSON key")
+        result[name] = value
+    return result
+
+
+class CommandAdapter:
+    """Configured argv and bounded stdin; exact full recipient/attempt echo required."""
+    def __init__(self, command, timeout=30, runner=None):
+        validated = CodexQueue(command, timeout)
+        self.command, self.timeout = validated.command, validated.timeout
+        self.runner = run_command if runner is None else runner
+
+    def __call__(self, target, payload, requested, attempt):
+        if type(payload) is not bytes or not 0 < len(payload) <= MAX_DATA:
+            raise Refused("Data payload must contain 1..6144 bytes")
+        recipient = {"kind": target.client, "id": target.identity}
+        wire = json.dumps(dict(recipient=recipient, attempt=attempt,
+                         payload=base64.b64encode(payload).decode("ascii")),
+                         ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        if len(wire) > MAX_DATA_RECORD:
+            raise Refused("Structured command input exceeds limit")
+        command = (command_prefix(self.command) if self.runner is run_command
+                   else list(self.command))
+        requested()
+        result = self.runner(command, self.timeout, wire)
+        if (type(result) not in (tuple, list) or len(result) != 3 or
+                type(result[0]) is not int or type(result[1]) is not bytes or
+                type(result[2]) is not bytes):
+            raise ValueError("Command runner requires int, bytes, bytes")
+        code, stdout, stderr = result
+        if code != 0 or max(len(stdout), len(stderr)) > MAX_RECORD:
+            return Receipt("OUTCOME_UNKNOWN", "No bounded successful command response")
+        try:
+            reply = json.loads(stdout.decode("utf-8", "strict"), object_pairs_hook=unique_object)
+        except (ValueError, UnicodeError, RecursionError):
+            return Receipt("OUTCOME_UNKNOWN", "Malformed command response")
+        if (type(reply) is not dict or set(reply) != {"status", "recipient", "attempt"} or
+                reply["recipient"] != recipient or reply["attempt"] != attempt or
+                reply["status"] not in {"STORED", "QUEUED", "THREAD_ACCEPTED"}):
+            return Receipt("OUTCOME_UNKNOWN", "Missing exact full recipient/attempt echo")
+        return Receipt(reply["status"], "Command acknowledged this recipient and attempt",
+                       target.identity, recipient_kind=target.client, attempt_id=attempt)
+
+
 class Courier:
-    def __init__(self, state, recipients, queue=None, urgent=None):
+    def __init__(self, state, recipients, queue=None, urgent=None, adapters=None):
         self.state = Path(state).resolve()
         self.recipients = dict(recipients)
         if not all(isinstance(k, str) and k and ":" not in k and
                    isinstance(v, Address) for k, v in self.recipients.items()):
             raise Refused("Invalid recipient registry")
         self.inbox, self.queue, self.urgent = Inbox(self.state), queue, urgent
+        self.adapters = dict(adapters or {})
+        if any(type(kind) is not str or not KIND.fullmatch(kind) or
+               kind in ("claude", "codex") or type(binding) is not Adapter
+               for kind, binding in self.adapters.items()):
+            raise Refused("Configured transports cannot override built-in kinds")
+        if any(x.client not in ("claude", "codex") and x.client not in self.adapters
+               for x in self.recipients.values()):
+            raise Refused("Every new endpoint kind needs a configured transport")
 
     @classmethod
     def from_config(cls, path):
         path = Path(path)
         data = json.loads(path.read_text(encoding="utf-8-sig"))
         if not isinstance(data, dict) or set(data) - {
-                "state_dir", "recipients", "codex_queue_command"}:
+                "state_dir", "recipients", "codex_queue_command", "transports"}:
             raise Refused("Unknown configuration fields")
         if not isinstance(data.get("state_dir"), str) or not data["state_dir"]:
             raise Refused("Explicit state_dir required")
@@ -407,18 +567,47 @@ class Courier:
         state = Path(data["state_dir"])
         if not state.is_absolute():
             state = path.parent / state
+        bindings = {}
+        transports = data.get("transports", {})
+        if type(transports) is not dict:
+            raise Refused("transports must be an object")
+        for kind, definition in transports.items():
+            if type(definition) is not dict:
+                raise Refused("Transport definition must be an object")
+            if definition == {"type": "inbox"}:
+                bindings[kind] = Adapter(DataInbox(state), frozenset({"notification", "data"}))
+            elif (definition.get("type") == "command" and set(definition) <=
+                  {"type", "command", "timeout", "receipt_status", "data_only"}):
+                modes = {"notification", "data"}
+                if type(definition.get("data_only", False)) is not bool:
+                    raise Refused("data_only must be a boolean")
+                if definition.get("data_only", False):
+                    modes.add("data_only")
+                bindings[kind] = Adapter(CommandAdapter(definition.get("command"),
+                    definition.get("timeout", 30)), frozenset(modes),
+                    definition.get("receipt_status", "STORED"))
+            else:
+                raise Refused("Unsupported transport configuration")
         command = data.get("codex_queue_command")
-        return cls(state, recipients, queue=CodexQueue(command) if command else None)
+        return cls(state, recipients, queue=CodexQueue(command) if command else None,
+                   adapters=bindings)
 
     def resolve(self, recipient):
         if recipient in self.recipients:
             return self.recipients[recipient]
         client, _, prefix = (recipient.partition(":") if ":" in recipient
                              else ("", "", recipient))
-        if client not in ("", "claude", "codex") or not PREFIX.fullmatch(prefix):
+        if client and client not in ("claude", "codex"):
+            hits = {x for x in self.recipients.values()
+                    if x.client == client and x.identity == prefix}
+            if len(hits) != 1:
+                raise Refused("Unknown configured address")
+            return hits.pop()
+        if not PREFIX.fullmatch(prefix):
             raise Refused("Unknown address")
         hits = {x for x in self.recipients.values()
-                if (not client or x.client == client) and x.identity.startswith(prefix)}
+                if x.client in ("claude", "codex") and
+                (not client or x.client == client) and x.identity.startswith(prefix)}
         if len(hits) != 1:
             raise Refused("Address is missing or ambiguous")
         return hits.pop()
@@ -442,13 +631,31 @@ class Courier:
         if target.client == "claude":
             if delivery is not None:
                 return Receipt("REFUSED", "Explicit Claude queue/urgent is unsupported")
+        return self._dispatch(target, key, sender, note, delivery)
+
+    def send_data(self, recipient, key, carrier, caller=None, data_only=False):
+        """Dispatch opaque bounded bytes; no notice wrapping or implied authority."""
+        target = self.resolve(recipient)
+        if caller is not None and not isinstance(caller, Address):
+            raise Refused("caller must be a canonical runtime address")
+        if same_address(target, caller):
+            return Receipt("SELF", "Same client and full identity")
+        if type(key) is not str or not key or len(key) > 256 or "\x00" in key:
+            raise Refused("Data key must be nonempty, NUL-free and at most 256 characters")
+        if type(carrier) is not bytes or not 0 < len(carrier) <= MAX_DATA:
+            raise Refused("Data carrier must contain 1..6144 bytes")
+        if type(data_only) is not bool:
+            raise Refused("data_only must be a boolean")
+        return self._dispatch(target, key, None, None, None, carrier, data_only)
+
+    def _dispatch(self, target, key, sender, note, delivery, carrier=None, data_only=False):
         lock_key = hashlib.sha256(json.dumps(
             [target.client, target.identity, key], ensure_ascii=True,
             separators=(",", ":")).encode("utf-8")).hexdigest()
         with file_lock(self.state / "send" / lock_key):
-            return self._send_locked(target, key, sender, note, delivery)
+            return self._send_locked(target, key, sender, note, delivery, carrier, data_only)
 
-    def _send_locked(self, target, key, sender, note, delivery):
+    def _send_locked(self, target, key, sender, note, delivery, carrier=None, data_only=False):
         journal = self.state / "journal.jsonl"
         held = held_outcome(records(journal), target, key)
         if held is not None:
@@ -459,9 +666,11 @@ class Courier:
         requested_count = 0
         adapter_called = False
         not_started = False
-        line = "Check %s from %s." % (key, sender) + (" " + note if note else "")
+        line = ("Check %s from %s." % (key, sender) + (" " + note if note else "")
+                if carrier is None else carrier)
         # Validate serialized bytes before any reservation or transport call.
-        encoded_record(dict(ts=now(), line=line))
+        if carrier is None:
+            encoded_record(dict(ts=now(), line=line))
         encoded_record(dict(base, ts=now(), status="REQUESTED"))
 
         def requested():
@@ -477,23 +686,44 @@ class Courier:
             return type(adapter) is CodexQueue and adapter.runner is run_command
 
         try:
-            if target.client == "claude":
-                adapter = self.inbox
-            else:
-                adapter = self.urgent if delivery == "urgent" else self.queue
-                if adapter is None:
-                    raise Refused("No configured transport for this mode")
-            expected_status = ("STORED" if target.client == "claude" else
-                               "THREAD_ACCEPTED" if delivery == "urgent" else "QUEUED")
-            # Exact built-ins reserve before effects; supplied code needs an earlier hold.
-            if type(adapter) is not Inbox and type(adapter) is not CodexQueue:
+            configured = target.client not in ("claude", "codex")
+            if configured:
+                # No supplied binding lookup or call precedes the durable hold.
                 append_record(journal, dict(base, ts=now(), status="RESERVED"))
+                binding = self.adapters.get(target.client)
+                if binding is None:
+                    raise Refused("No configured transport for this kind")
+                mode = "notification" if carrier is None else "data"
+                if delivery is not None or mode not in binding.capabilities:
+                    raise Refused("Adapter does not support this delivery mode")
+                if data_only and "data_only" not in binding.capabilities:
+                    raise Refused("Receiver has no configured data-only capability")
+                adapter, expected_status = binding.transport, binding.receipt_status
+                payload = line.encode("utf-8") if carrier is None else carrier
+                if len(payload) > MAX_DATA:
+                    raise Refused("Configured transport payload exceeds 6144 bytes")
+            else:
+                if carrier is not None:
+                    raise Refused("Legacy prompt transport cannot carry data-only requests")
+                if target.client == "claude":
+                    adapter = self.inbox
+                else:
+                    adapter = self.urgent if delivery == "urgent" else self.queue
+                    if adapter is None:
+                        raise Refused("No configured transport for this mode")
+                expected_status = ("STORED" if target.client == "claude" else
+                                   "THREAD_ACCEPTED" if delivery == "urgent" else "QUEUED")
+                # Exact built-ins reserve before effects; supplied code needs an earlier hold.
+                if type(adapter) is not Inbox and type(adapter) is not CodexQueue:
+                    append_record(journal, dict(base, ts=now(), status="RESERVED"))
             adapter_called = True
-            receipt = adapter(target, line, requested)
+            receipt = (adapter(target, payload, requested, base["attempt"]) if configured else
+                       adapter(target, line, requested))
             if type(receipt) is not Receipt:
                 raise ValueError("Invalid transport receipt type")
             values = (receipt.status, receipt.detail, receipt.recipient_id,
-                      receipt.queue_item_id, receipt.held_status)
+                      receipt.queue_item_id, receipt.held_status,
+                      receipt.recipient_kind, receipt.attempt_id)
             if (type(values[0]) is not str or type(values[1]) is not str or
                     any(value is not None and type(value) is not str for value in values[2:])):
                 raise ValueError("Invalid transport receipt fields")
@@ -508,6 +738,9 @@ class Courier:
                     requested_count != 1 or receipt.recipient_id != target.identity or
                     receipt.status != expected_status):
                 raise ValueError("Missing reservation, receiver echo or compatible mode")
+            if configured and receipt.status in {"STORED", "QUEUED", "THREAD_ACCEPTED"} and (
+                    receipt.recipient_kind != target.client or receipt.attempt_id != base["attempt"]):
+                raise ValueError("Missing exact configured address or attempt echo")
         except NotStarted as error:
             not_started = type(adapter) is CodexQueue and isinstance(error.__cause__, OSError)
             receipt = Receipt("REFUSED", failure_detail(error))
@@ -527,6 +760,15 @@ class Courier:
         return receipt
 
 
+    def reader(self, target):
+        if target.client == "claude":
+            return self.inbox
+        binding = self.adapters.get(target.client)
+        if binding is None or type(binding.transport) is not DataInbox:
+            raise Refused("This endpoint has no local readable inbox")
+        return binding.transport
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
@@ -537,6 +779,11 @@ def main():
     send.add_argument("--sender", required=True)
     send.add_argument("--note", default="")
     send.add_argument("--delivery", choices=("queue", "urgent"))
+    data = commands.add_parser("send-data")
+    data.add_argument("recipient")
+    data.add_argument("--key", required=True)
+    data.add_argument("--file", required=True)
+    data.add_argument("--data-only", action="store_true")
     show = commands.add_parser("show")
     show.add_argument("recipient")
     show.add_argument("--event", default="UserPromptSubmit")
@@ -548,18 +795,28 @@ def main():
     receipt = None
     try:
         courier = Courier.from_config(args.config)
-        if args.command == "send":
-            receipt = courier.send(args.recipient, args.key, args.sender,
-                                   args.note, args.delivery)
+        if args.command in ("send", "send-data"):
+            if args.command == "send":
+                receipt = courier.send(args.recipient, args.key, args.sender,
+                                       args.note, args.delivery)
+            else:
+                with Path(args.file).open("rb") as source:
+                    carrier = source.read(MAX_DATA + 1)
+                receipt = courier.send_data(args.recipient, args.key, carrier,
+                                            data_only=args.data_only)
             print(json.dumps(receipt.as_dict(), ensure_ascii=True), flush=True)
             return 0 if (receipt.status in {"STORED", "QUEUED", "THREAD_ACCEPTED", "SELF"} or
                          receipt.status == "SKIPPED" and receipt.held_status in
                          {"STORED", "QUEUED", "THREAD_ACCEPTED"}) else 1
         target = courier.resolve(args.recipient)
         if args.command == "show":
-            courier.inbox.show(target, args.event)
+            reader = courier.reader(target)
+            if target.client == "claude":
+                reader.show(target, args.event)
+            else:
+                reader.show(target)
             return 0
-        ready = courier.inbox.watch(target, args.timeout, args.poll)
+        ready = courier.reader(target).watch(target, args.timeout, args.poll)
         print("MAIL_READY" if ready else "QUIET")
         return 0
     except (Refused, OSError, ValueError, TypeError) as error:

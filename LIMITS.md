@@ -1,6 +1,6 @@
 # Limits
 
-This is a small local notification wrapper. Its trust boundary is a configured recipient
+This is a small local notification and bounded-data courier. Its trust boundary is a configured recipient
 registry, a trusted state directory and explicitly supplied transport code. It has no
 content judge, account manager, source-result store or deployment service.
 
@@ -40,7 +40,7 @@ frames. Such in-process code can forge NOT_STARTED after dispatch; use only trus
 Adapter ordering is still trusted, not observed. The courier retains RESERVED before
 entering supplied callable code or built-in subclasses, without counting this as a callback.
 A successful callback writes REQUESTED, separately from RESERVED; a repeated call
-is refused. Exact Inbox and CodexQueue wrappers reserve through their own callback
+is refused. Exact legacy Inbox and CodexQueue wrappers reserve through their own callback
 before effects.
 All producers sharing state_dir must use compatible journal and send-lock protocols, including recognition of RESERVED as a retained hold. Earlier courier versions that do not recognise RESERVED may repeat an attempt held only by that status. Stop every old producer before upgrading; do not delete retained journal rows or lock files as a migration step.
 
@@ -87,7 +87,9 @@ offset writes causes an explicit mismatch refusal, requiring operator recovery. 
 nonzero offset without identity also requires operator recovery. The standalone
 show/watch share one cursor lock; unrelated external readers do not participate.
 
-Records are capped at 8192 UTF-8 bytes. Each show operation emits at most 64 letters;
+Legacy inbox and journal records are capped at 8192 UTF-8 bytes. Configured data
+inbox records and command stdin are capped at 16384 bytes; the decoded payload
+is limited to 1..6144 bytes. Each show operation emits at most 64 letters;
 remaining complete letters wait for the next show operation. Key, sender and notice
 fields have character limits of 256, 100 and 1024. Key and sender must be nonempty;
 NUL characters in notification fields, queue argument lists and direct queue notices
@@ -122,7 +124,17 @@ manage descendant processes. A timed-out command has an unknown outcome and must
 automatically. Temporary files use Python's configured temporary directory; set TMPDIR
 or TEMP appropriately for your host.
 
-The queue parser concatenates stdout followed by stderr, strips surrounding whitespace
+Configured command adapters send bounded JSON on stdin and require the exact full
+kind/id and attempt in a closed JSON acknowledgement. The configured status must
+match. A generic command does not need a Codex queue item ID. stdout and stderr
+are each bounded at 8192 bytes; only stdout is parsed for this protocol. A
+configured timeout defaults to 30 seconds and must be positive and at most 120.
+The declared `data_only` capability is not evidence of isolation: receiver code
+and host context routing remain operator responsibilities. Opaque byte storage
+does not authenticate a sender or remove prompt injection. Generic file inboxes
+emit data JSON and do not create ring files or hook context.
+
+The legacy Codex queue parser concatenates stdout followed by stderr, strips surrounding whitespace
 and accepts one exact response shape. Extra stderr warnings also prevent acknowledgement.
 Extra non-whitespace output, changed CLI wording, a mismatched receiver or missing
 item ID produces OUTCOME_UNKNOWN. The offline checks run the wrapper CLI and synthetic local processes; they do not measure an installed
@@ -146,11 +158,11 @@ Native Windows operation, including concurrent appends, is not guaranteed.
 
 | Status | What it establishes |
 |---|---|
-| STORED | Local letter and ring writes completed. |
+| STORED | A local inbox append completed (with a ring for legacy Claude), or a configured adapter acknowledged storage for this address/attempt. |
 | RESERVED | A durable hold was written before supplied-code entry; the callback may not have run. |
 | REQUESTED | The transport callback recorded its reservation; it does not prove dispatch. |
-| QUEUED | The configured command acknowledged an item for the exact receiver. |
-| THREAD_ACCEPTED | A supplied native adapter reported the exact receiver's acceptance. |
+| QUEUED | A Codex-compatible command acknowledged an item, or a configured adapter acknowledged queuing for the exact address/attempt. |
+| THREAD_ACCEPTED | A supplied adapter reported acceptance for the exact receiver (and attempt for configured routes). |
 | REFUSED | Dispatch did not start, or the adapter explicitly reported a refusal; a failed child creation can follow reservation. |
 | OUTCOME_UNKNOWN | Dispatch may have happened; a usable receipt is missing. |
 | SKIPPED | This recipient/key has a retained outcome, named by held_status. |

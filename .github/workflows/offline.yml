@@ -25,4 +25,6 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Functional checks and regression mutations
-        run: python tests/check_offline.py
+        run: |
+          python tests/check_offline.py
+          python tests/check_configured.py --mutations

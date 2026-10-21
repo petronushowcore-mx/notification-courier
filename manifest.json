@@ -5,6 +5,7 @@
   "python_minimum": "3.10",
   "dependencies": [
     "Python standard library",
+    "Optional user-configured stdin/JSON receiver",
     "Optional user-configured queue executable",
     "Optional user-supplied authorised urgent adapter"
   ],
@@ -16,13 +17,43 @@
     },
     {
       "path": ".github/workflows/offline.yml",
-      "bytes": 639,
-      "sha256": "4e61653e6a2980cbcb899f5549a7fa2897d6d99c39e89f9dbb9fb30119d3fc6a"
+      "bytes": 706,
+      "sha256": "aa4d5b7d4742706ddb3cf590e322ce619dba7ea279b1e004e81c5fc2ab0654df"
     },
     {
       "path": ".gitignore",
       "bytes": 32,
       "sha256": "fad31060e9b100af516e2ff31817fd6fb158cb497ca6088f766ab33ba9aff8c1"
+    },
+    {
+      "path": "INTEGRATION.md",
+      "bytes": 9349,
+      "sha256": "6d8ab09181f2c8fbda6f9348b6e232470b0068e920efcdc27ddb807adde02a4b"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1061,
+      "sha256": "509f2c4068e339d5782ea8c7a968bb16a289348053343a9f5d14c0550703412c"
+    },
+    {
+      "path": "LIMITS.md",
+      "bytes": 12858,
+      "sha256": "9c8aca12b9e02ef5878cada51d4e60b4257bb841bee4eb1d86e44e6e0adc1ef7"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4346,
+      "sha256": "32320abc9bb5ed40d362669c05132ba5bba15ff6af524de7b34cc20b63227b5e"
+    },
+    {
+      "path": "REPOSITORY-PACKAGE.md",
+      "bytes": 2452,
+      "sha256": "73b8330d091a5270279af9ee54a267fad7558b2a91cba645503dfcde35f30ceb"
+    },
+    {
+      "path": "SECURITY.md",
+      "bytes": 2239,
+      "sha256": "96d56c1c8510b4b0dbba648ebe8318526a53775ae7f6ddd8967b7bd15341a70a"
     },
     {
       "path": "assets/coura.gif",
@@ -36,8 +67,13 @@
     },
     {
       "path": "courier.py",
-      "bytes": 25268,
-      "sha256": "9ac1987a73e7c890f1a801923b696ed912fc5e9ff683da0d50d8f20e5cdc173c"
+      "bytes": 38578,
+      "sha256": "afc363d7f147fcb2ef00e347d335e2b80aa4d51fc3a7677dfdc81ff90ba9c6be"
+    },
+    {
+      "path": "example-generic.json",
+      "bytes": 194,
+      "sha256": "f55cbdbad70a0aeda79c0cdd9fa1c3eeffe3fc2bfc30bdde88ed46d02a7b16eb"
     },
     {
       "path": "example.json",
@@ -45,39 +81,14 @@
       "sha256": "e1396b10a1193e8312ff719c328770ee8e3c0d5d65b6378c7c3ea14c86d9778d"
     },
     {
-      "path": "INTEGRATION.md",
-      "bytes": 5628,
-      "sha256": "085ecb9f966ae2417e4d7cdf0956d7e0149b3dc01a2dde004062329bbf97f94e"
-    },
-    {
-      "path": "LICENSE",
-      "bytes": 1061,
-      "sha256": "509f2c4068e339d5782ea8c7a968bb16a289348053343a9f5d14c0550703412c"
-    },
-    {
-      "path": "LIMITS.md",
-      "bytes": 11790,
-      "sha256": "d390e3112950859047836ea84a6f7df49a3a1210ed44fdf5ce7836ae9d4e3c67"
-    },
-    {
-      "path": "README.md",
-      "bytes": 4193,
-      "sha256": "b0a45420728b41fa9b96fe7924f154428f75002cfbdb4b3732ea5b9540067b88"
-    },
-    {
-      "path": "REPOSITORY-PACKAGE.md",
-      "bytes": 2081,
-      "sha256": "4f3f30b580bf37c16edcdf2aabbfabfb0dd4a6ce752a1cef8da0937b0294560e"
-    },
-    {
-      "path": "SECURITY.md",
-      "bytes": 1719,
-      "sha256": "acf1bc8ad7ba92bd48b7bcd8510024832ee4704238218ac48bf3d427c429b7c2"
+      "path": "tests/check_configured.py",
+      "bytes": 20691,
+      "sha256": "139cef5e15f11a98cf6c89663c330d82b8d51c59028609fac4f43ac49b3becce"
     },
     {
       "path": "tests/check_offline.py",
-      "bytes": 103949,
-      "sha256": "bf4b501eb01d77bf1a0c01dc6d6d2ac69d6b4138f8f07ee764c1518eaaa631e5"
+      "bytes": 107444,
+      "sha256": "9d66b47220ed4f145bdff01926697db186ad31c196ae07f7413e798a9b4ed07f"
     }
   ]
 }
