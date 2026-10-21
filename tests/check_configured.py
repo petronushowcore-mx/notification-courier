@@ -321,7 +321,7 @@ REGRESSIONS = [{"id": "base_independent", "kind": "REACH", "mutations": [{"path"
 
 
 def outcome(code, stdout):
-    lines = stdout.decode("utf-8", errors="strict").split("\n")
+    lines = stdout.decode("utf-8", errors="strict").replace("\r\n", "\n").split("\n")
     names = {name for name, _ in CHECKS}
     failures = [re.fullmatch(r"FAIL ([A-Z_]+): .+", line)
                 for line in lines if line.startswith("FAIL ")]
@@ -340,12 +340,17 @@ def outcome(code, stdout):
 
 
 def mutations():
-    controls = [outcome(0, b"teeth: 12/12\n") == (12, None),
-                outcome(1, b"teeth: 12/12\n") is None,
-                outcome(0, b"teeth: 11/12\n") is None,
-                outcome(1, b"FAIL DATA_BOUND: AssertionError: fixture\nteeth: 12/12\n") is None,
-                outcome(0, b"") is None]
-    if not all(controls):
+    controls = [
+        outcome(0, b"teeth: 12/12\n") == (12, None),
+        outcome(1, b"teeth: 12/12\n") is None,
+        outcome(0, b"teeth: 11/12\n") is None,
+        outcome(1, b"FAIL DATA_BOUND: AssertionError: fixture\nteeth: 12/12\n") is None,
+        outcome(0, b"") is None,
+        outcome(0, b"teeth: 12/12\r\n") == (12, None),
+        outcome(1, b"FAIL DATA_BOUND: AssertionError: fixture\r\nteeth: 11/12\r\n") == (11, "DATA_BOUND"),
+        outcome(0, b"teeth: 12/12\r") is None
+    ]
+    if len(controls) != 8 or not all(controls):
         raise AssertionError("RESULT_READER_CONTROL")
     if len(REGRESSIONS) != 14:
         raise AssertionError("REGRESSION_POPULATION")
@@ -375,7 +380,7 @@ def mutations():
                      else not 0 < observed[0] < 12)):
                 raise AssertionError((case["id"], observed, done.stdout, done.stderr))
             print("regression %s: first=%s" % (case["id"], observed[1]), flush=True)
-    print("mutations: 14/14; result-reader controls: 5/5", flush=True)
+    print("mutations: 14/14; result-reader controls: 8/8", flush=True)
     return 0
 
 
