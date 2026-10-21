@@ -82,8 +82,8 @@
     },
     {
       "path": "tests/check_configured.py",
-      "bytes": 20691,
-      "sha256": "139cef5e15f11a98cf6c89663c330d82b8d51c59028609fac4f43ac49b3becce"
+      "bytes": 20701,
+      "sha256": "eb6194a5ab1f6a174e844497e3165983f510fbb6c29f1dcaedddeeb389143a8d"
     },
     {
       "path": "tests/check_offline.py",

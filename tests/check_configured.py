@@ -80,7 +80,7 @@ def legacy_lock_bytes():
             yield
     m.file_lock = observe
     with tempfile.TemporaryDirectory() as state:
-        p = Path(state)
+        p = Path(state).resolve()
         row = {"client": "claude", "id": LEGACY_ID, "key": "legacy",
                "attempt": "preexisting", "status": "RESERVED"}
         (p / "journal.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
