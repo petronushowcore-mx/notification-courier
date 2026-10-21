@@ -35,3 +35,5 @@ establish real delivery or host acceptance.
 itself to avoid a circular digest.
 
 See [README.md](README.md) for usage and [LIMITS.md](LIMITS.md) for declared ceilings.
+
+Integration examples are in INTEGRATION.md; message and producer trust boundaries are in SECURITY.md. The repository workflow invokes the offline check on Linux, macOS and Windows. A configured job is not a portability guarantee; consult its actual result.

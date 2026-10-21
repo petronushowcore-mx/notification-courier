@@ -141,3 +141,25 @@ background task can turn that notice into an idle chat wake. The wrapper does no
 promise a host will do so.
 
 Native Windows operation, including concurrent appends, is not guaranteed.
+
+## Read the receipt literally
+
+| Status | What it establishes |
+|---|---|
+| STORED | Local letter and ring writes completed. |
+| RESERVED | A durable hold was written before supplied-code entry; the callback may not have run. |
+| REQUESTED | The transport callback recorded its reservation; it does not prove dispatch. |
+| QUEUED | The configured command acknowledged an item for the exact receiver. |
+| THREAD_ACCEPTED | A supplied native adapter reported the exact receiver's acceptance. |
+| REFUSED | Dispatch did not start, or the adapter explicitly reported a refusal; a failed child creation can follow reservation. |
+| OUTCOME_UNKNOWN | Dispatch may have happened; a usable receipt is missing. |
+| SKIPPED | This recipient/key has a retained outcome, named by held_status. |
+| SELF | The resolved client and full identity equal the supplied caller. |
+
+The CLI reports `RECEIPT_OUTPUT_FAILED` if writing or flushing a completed send receipt
+fails; its `delivery_receipt` retains the transport outcome and the exit code is nonzero.
+An output error does not cancel delivery or permit replay. Check the retained journal.
+
+No transport result is `READ`. Printed hook context is not proof that an assistant read
+the underlying result or acted on it. Obtain reading evidence from the recipient through
+your application's own acknowledgement channel.

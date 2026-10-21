@@ -15,6 +15,11 @@
       "sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c"
     },
     {
+      "path": ".github/workflows/offline.yml",
+      "bytes": 639,
+      "sha256": "4e61653e6a2980cbcb899f5549a7fa2897d6d99c39e89f9dbb9fb30119d3fc6a"
+    },
+    {
       "path": ".gitignore",
       "bytes": 32,
       "sha256": "fad31060e9b100af516e2ff31817fd6fb158cb497ca6088f766ab33ba9aff8c1"
@@ -40,24 +45,34 @@
       "sha256": "e1396b10a1193e8312ff719c328770ee8e3c0d5d65b6378c7c3ea14c86d9778d"
     },
     {
+      "path": "INTEGRATION.md",
+      "bytes": 5628,
+      "sha256": "085ecb9f966ae2417e4d7cdf0956d7e0149b3dc01a2dde004062329bbf97f94e"
+    },
+    {
       "path": "LICENSE",
       "bytes": 1061,
       "sha256": "509f2c4068e339d5782ea8c7a968bb16a289348053343a9f5d14c0550703412c"
     },
     {
       "path": "LIMITS.md",
-      "bytes": 10439,
-      "sha256": "400f3ec5ef048ff19d88e05aeb457041350763cfa7ce02772291a1cb16be10b8"
+      "bytes": 11790,
+      "sha256": "d390e3112950859047836ea84a6f7df49a3a1210ed44fdf5ce7836ae9d4e3c67"
     },
     {
       "path": "README.md",
-      "bytes": 11478,
-      "sha256": "ce316d41d27aae6dbdde5906f2eca3d637b9087811aacdde6f1c9cf19bb74dad"
+      "bytes": 4193,
+      "sha256": "b0a45420728b41fa9b96fe7924f154428f75002cfbdb4b3732ea5b9540067b88"
     },
     {
       "path": "REPOSITORY-PACKAGE.md",
-      "bytes": 1823,
-      "sha256": "da8d252297a08064bd438be59f2e35394e51d72a04b0f14522fd77c6a6ebf3e0"
+      "bytes": 2081,
+      "sha256": "4f3f30b580bf37c16edcdf2aabbfabfb0dd4a6ce752a1cef8da0937b0294560e"
+    },
+    {
+      "path": "SECURITY.md",
+      "bytes": 1719,
+      "sha256": "acf1bc8ad7ba92bd48b7bcd8510024832ee4704238218ac48bf3d427c429b7c2"
     },
     {
       "path": "tests/check_offline.py",
