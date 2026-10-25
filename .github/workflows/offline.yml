@@ -25,6 +25,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Functional checks and regression mutations
+        # bash on every runner: the first failing command fails the step (Windows PowerShell would continue).
+        shell: bash
         run: |
           python tests/check_offline.py
           python tests/check_configured.py --mutations

@@ -356,7 +356,8 @@ def test_windows_hook_quoting():
     if powershell is None:
         print("UNRUN powershell hook round-trip: powershell is not installed on this host")
     else:
-        ps_parts = " ".join(module.quote_powershell_arg(part) for part in (
+        # A quoted first token is an expression in PowerShell; the call operator runs it.
+        ps_parts = "& " + " ".join(module.quote_powershell_arg(part) for part in (
             [sys.executable, "-c", probe, *dangerous]))
         ps = subprocess.run(
             [powershell, "-NoProfile", "-Command", ps_parts],

@@ -21,8 +21,8 @@
     },
     {
       "path": ".github/workflows/offline.yml",
-      "bytes": 1353,
-      "sha256": "a6f2b923fb0fefdd5f45d3bbee792ddf37be31b89efe36f288292bb6d9d4d9c1"
+      "bytes": 1483,
+      "sha256": "ddda4c7714d529c93d0f3d75701ce3f4f8f99900d81bffd75959ca4497bd1a85"
     },
     {
       "path": ".gitignore",
@@ -206,8 +206,8 @@
     },
     {
       "path": "tests/check_adopt.py",
-      "bytes": 46089,
-      "sha256": "077f17d58759bcb0ac322274253e98bc583842e2e72ca8891c59ced5e182dae3"
+      "bytes": 46186,
+      "sha256": "ddb91cced7d7f550952985276745e1da1beed1993ea6ee15273539772a6760a9"
     },
     {
       "path": "tests/check_configured.py",
