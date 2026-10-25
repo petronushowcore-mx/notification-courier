@@ -1,0 +1,18 @@
+{
+  "state_dir": "./local-state",
+  "transports": {
+    "worker": {
+      "type": "command",
+      "command": ["python", "meta_coura.py", "receive", "--store", "./receiver.sqlite", "--recipient", "worker:writer", "--target", "board", "--urgent", "no", "--important", "yes"],
+      "timeout": 30,
+      "receipt_status": "STORED",
+      "data_only": true
+    }
+  },
+  "recipients": {
+    "writer": {
+      "client": "worker",
+      "id": "writer"
+    }
+  }
+}

@@ -7,7 +7,11 @@
     "Python standard library",
     "Optional user-configured stdin/JSON receiver",
     "Optional user-configured queue executable",
-    "Optional user-supplied authorised urgent adapter"
+    "Optional user-supplied authorised urgent adapter",
+    "Optional Meta-Coura: cryptography for Ed25519, unpinned, not required by base Coura",
+    "Optional remote adapter: OpenSSH client for the SSH form, not required by base Coura",
+    "Optional usability archive: coura.pyz built by build_coura_pyz.py, standard library only",
+    "Optional observer: sqlite3 from the Python standard library"
   ],
   "files": [
     {
@@ -17,43 +21,13 @@
     },
     {
       "path": ".github/workflows/offline.yml",
-      "bytes": 706,
-      "sha256": "aa4d5b7d4742706ddb3cf590e322ce619dba7ea279b1e004e81c5fc2ab0654df"
+      "bytes": 1353,
+      "sha256": "a6f2b923fb0fefdd5f45d3bbee792ddf37be31b89efe36f288292bb6d9d4d9c1"
     },
     {
       "path": ".gitignore",
-      "bytes": 32,
-      "sha256": "fad31060e9b100af516e2ff31817fd6fb158cb497ca6088f766ab33ba9aff8c1"
-    },
-    {
-      "path": "INTEGRATION.md",
-      "bytes": 9349,
-      "sha256": "6d8ab09181f2c8fbda6f9348b6e232470b0068e920efcdc27ddb807adde02a4b"
-    },
-    {
-      "path": "LICENSE",
-      "bytes": 1061,
-      "sha256": "509f2c4068e339d5782ea8c7a968bb16a289348053343a9f5d14c0550703412c"
-    },
-    {
-      "path": "LIMITS.md",
-      "bytes": 12858,
-      "sha256": "9c8aca12b9e02ef5878cada51d4e60b4257bb841bee4eb1d86e44e6e0adc1ef7"
-    },
-    {
-      "path": "README.md",
-      "bytes": 4346,
-      "sha256": "32320abc9bb5ed40d362669c05132ba5bba15ff6af524de7b34cc20b63227b5e"
-    },
-    {
-      "path": "REPOSITORY-PACKAGE.md",
-      "bytes": 2452,
-      "sha256": "73b8330d091a5270279af9ee54a267fad7558b2a91cba645503dfcde35f30ceb"
-    },
-    {
-      "path": "SECURITY.md",
-      "bytes": 2239,
-      "sha256": "96d56c1c8510b4b0dbba648ebe8318526a53775ae7f6ddd8967b7bd15341a70a"
+      "bytes": 64,
+      "sha256": "532b93e56562d436a232998d628b5606640286f5fd09ab17cb7345142d71a87f"
     },
     {
       "path": "assets/coura.gif",
@@ -66,9 +40,54 @@
       "sha256": "8a559d2d175e30f5663d1b71314226a870008eda4b781e25cc5a71e6c49bd817"
     },
     {
+      "path": "build_coura_pyz.py",
+      "bytes": 1630,
+      "sha256": "87dd992cc7c97695016976f5cbdb2a442c08fdd16f8e7faa92f32ed6980d619f"
+    },
+    {
+      "path": "coura_mcp.py",
+      "bytes": 25118,
+      "sha256": "46f8a6d92cf066ef8b5fbcc03314516e33d19367fe8d2e8eb25fb8dc65887fa4"
+    },
+    {
+      "path": "coura_pair.py",
+      "bytes": 23227,
+      "sha256": "438df6fb01e2fa35ebbe5e17358cf53bc571068ced3f4521dafe72a3b76b6a98"
+    },
+    {
+      "path": "coura_remote.py",
+      "bytes": 28094,
+      "sha256": "d2419ccc8e4627d5809dcbf9a1ff4866b839eb0da09fa6d61a52ce484ac5a84a"
+    },
+    {
+      "path": "coura_ux.py",
+      "bytes": 30144,
+      "sha256": "fd0e1ef0b5dda37453ca6e08f0ee7803163c5897b058f16852d1da386130c6ee"
+    },
+    {
       "path": "courier.py",
-      "bytes": 38578,
-      "sha256": "afc363d7f147fcb2ef00e347d335e2b80aa4d51fc3a7677dfdc81ff90ba9c6be"
+      "bytes": 101133,
+      "sha256": "a4bdf94d86e31c83f4335619e4e55058d1cfc9fd450577ec9b87973605faa2b4"
+    },
+    {
+      "path": "docs/mcp.md",
+      "bytes": 5078,
+      "sha256": "41de1f582017dbb79a81a4cf92914bc73f2de352c8b0af24903827bd88448b8e"
+    },
+    {
+      "path": "docs/meta-coura.md",
+      "bytes": 17265,
+      "sha256": "30c6ac077773399619ac916fe4ffc2f6c8d6bf18bb83211dbfe35eb7253e389d"
+    },
+    {
+      "path": "docs/quickstart.md",
+      "bytes": 4486,
+      "sha256": "b1b86ad708d6e67e8b1a523abc9f8cddf5f2b81a0d5fdd8c479944be4ecf564a"
+    },
+    {
+      "path": "docs/remote.md",
+      "bytes": 10273,
+      "sha256": "e459c40ffbf322eda9cf05f66218a23607ab03317a07ed833b2deab5639a12c8"
     },
     {
       "path": "example-generic.json",
@@ -76,9 +95,119 @@
       "sha256": "f55cbdbad70a0aeda79c0cdd9fa1c3eeffe3fc2bfc30bdde88ed46d02a7b16eb"
     },
     {
+      "path": "example-observer.json",
+      "bytes": 379,
+      "sha256": "1d4b6ffdc6d110ed246f215f9fa59cf8da0ef9b0f0f334e4b6bffbdd43e39400"
+    },
+    {
       "path": "example.json",
       "bytes": 258,
       "sha256": "e1396b10a1193e8312ff719c328770ee8e3c0d5d65b6378c7c3ea14c86d9778d"
+    },
+    {
+      "path": "examples/agenda_collector.py",
+      "bytes": 1818,
+      "sha256": "dd8a9955698a12503531b08410eaa8fb516c54df67c0e054dfe05f652cadf663"
+    },
+    {
+      "path": "examples/command-receiver.py",
+      "bytes": 1167,
+      "sha256": "4274d24dbba2a6529aa12d9bbd3ebf4e6d979b4b8c54ac946fb2e3c969dd540b"
+    },
+    {
+      "path": "examples/meta-coura-courier.json",
+      "bytes": 458,
+      "sha256": "c4bcda2429568e0107e94a55f8af1f820cb78f993fd19e19ffe738ee3184cf14"
+    },
+    {
+      "path": "examples/meta-coura-registration.json",
+      "bytes": 415,
+      "sha256": "dde142e28608e0070ac5262431c532f7a78306630fd2a50ba94a236b366cab0e"
+    },
+    {
+      "path": "examples/read-inbox.py",
+      "bytes": 687,
+      "sha256": "1746c399280d5c993ea799a7c7dc2463d9ec6f334729f5d212aad3ac972a14ff"
+    },
+    {
+      "path": "examples/remote-ssh-peer.json",
+      "bytes": 445,
+      "sha256": "8c8386e8ea2efedb1d4ac1635af592f89bb48b46880342963825e779981c8372"
+    },
+    {
+      "path": "INTEGRATION.md",
+      "bytes": 24017,
+      "sha256": "e17487cba2dfcb9cc2a588035c1eaec82d634fbb4170e17c89648231d1458a1b"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1061,
+      "sha256": "509f2c4068e339d5782ea8c7a968bb16a289348053343a9f5d14c0550703412c"
+    },
+    {
+      "path": "LIMITS.md",
+      "bytes": 24833,
+      "sha256": "a0af1a7f1121a03fa8a70d1e1f75ec3e2190b873f440031ec6a0a2081d614938"
+    },
+    {
+      "path": "meta_coura.py",
+      "bytes": 53891,
+      "sha256": "43d7e637c6220ed7c600068ee8e144481d639cac5db4524bea70320e9407a519"
+    },
+    {
+      "path": "observer.py",
+      "bytes": 39455,
+      "sha256": "a145051dcef8ab46bd46d2f5379881ebadf57b1571bf1ed76aad49622b5e3a6e"
+    },
+    {
+      "path": "pyproject.toml",
+      "bytes": 632,
+      "sha256": "3c0dde38d72ad6be40b439e040e4ed3a7aadd678e41ed9f39ecc26804b884eab"
+    },
+    {
+      "path": "README.md",
+      "bytes": 7628,
+      "sha256": "cf447b4bf669214bcc962346ce51ab04f491a3a9431ccf28f46f7eb0d6a41731"
+    },
+    {
+      "path": "REPOSITORY-PACKAGE.md",
+      "bytes": 4766,
+      "sha256": "1db619bce1849719075b6bf9bb3981e9b796d5a5d13d2949e841cf5b2cb30a2c"
+    },
+    {
+      "path": "requirements-meta-coura.txt",
+      "bytes": 144,
+      "sha256": "ea193efb4c331a4ffede729d12d21df75e3ebdfa6ebfe440977f92dc9305f943"
+    },
+    {
+      "path": "SECURITY.md",
+      "bytes": 5935,
+      "sha256": "beb8e05f9975ce2848b6910c1aedf267a34bc223b81e83a9952f5a33573e1884"
+    },
+    {
+      "path": "tests/break_doctor.py",
+      "bytes": 7895,
+      "sha256": "78f79e18a162fc24f9a0e63f886fe9ec86201414e11677a586bb7f1f11fe0d9b"
+    },
+    {
+      "path": "tests/break_observer_lens.py",
+      "bytes": 7706,
+      "sha256": "19f887943fc57954b0e483d3a000ab2d9de3ad5673b383c9eef4dc9ccbdd5c44"
+    },
+    {
+      "path": "tests/break_observer_queue.py",
+      "bytes": 5419,
+      "sha256": "1d1e9b052b20bac9c52b6bdf8933d680ff37da7f7670f724dd5ac632dbdbddd1"
+    },
+    {
+      "path": "tests/break_state_boundaries.py",
+      "bytes": 7345,
+      "sha256": "dc4c1624162ad31a15bf0815d4fb67581f6e86d7ea4a57d51808b0a6a9075b94"
+    },
+    {
+      "path": "tests/check_adopt.py",
+      "bytes": 46089,
+      "sha256": "077f17d58759bcb0ac322274253e98bc583842e2e72ca8891c59ced5e182dae3"
     },
     {
       "path": "tests/check_configured.py",
@@ -86,9 +215,54 @@
       "sha256": "61c49e14010cc58828b78b34c856f3b52749e73d58c7c09922492553e5ba9296"
     },
     {
+      "path": "tests/check_mcp.py",
+      "bytes": 32129,
+      "sha256": "0f9a2601489fbd45c7d3c43837bf461a8ac7c3c5744d2e2fbeaf3ce8d7d5398a"
+    },
+    {
+      "path": "tests/check_meta_coura.py",
+      "bytes": 63461,
+      "sha256": "3d109444fb7c202db58dc934492e2887e0a5b31a9af43c65b8d7cc6b408f3f40"
+    },
+    {
+      "path": "tests/check_observer.py",
+      "bytes": 27963,
+      "sha256": "9d09d32633492cb3f5e20fa4601164558687e9814ac522fd45f99b86c25f8e66"
+    },
+    {
+      "path": "tests/check_observer_lens.py",
+      "bytes": 10658,
+      "sha256": "dca5352209e06d73684e3303d7eab1732aba6d672c79309458ce601c4158dfd7"
+    },
+    {
+      "path": "tests/check_observer_queue.py",
+      "bytes": 13144,
+      "sha256": "1d6047c21b9b064cd9445188e57bcd8d8fdfcebf46f1d69efc0f1e9a9a39525b"
+    },
+    {
       "path": "tests/check_offline.py",
-      "bytes": 107444,
-      "sha256": "9d66b47220ed4f145bdff01926697db186ad31c196ae07f7413e798a9b4ed07f"
+      "bytes": 107524,
+      "sha256": "e026cc10d7fe75f79d75e1e2fd9376de6e4024295564abac45b023b321f8980b"
+    },
+    {
+      "path": "tests/check_remote.py",
+      "bytes": 37660,
+      "sha256": "351f400c11ddfde2e38e021ac701b8cd699ad14bb36dbdc26ff574d5ad47fddf"
+    },
+    {
+      "path": "tests/check_state_boundaries.py",
+      "bytes": 16987,
+      "sha256": "dcaf61fcc79ea20737e7db837bfff964bd3c402bd3b962d5c59768477c3af3cc"
+    },
+    {
+      "path": "tests/check_ux.py",
+      "bytes": 49583,
+      "sha256": "54c29ccd08e18be20153ef014d4bb5394dbed223b89c056f051f474637866f82"
+    },
+    {
+      "path": "tests/check_v5_regressions.py",
+      "bytes": 22064,
+      "sha256": "c078607484ed5de765b7bc79e41037b8ec261cc43de773af3b197461bb982a2e"
     }
   ]
 }

@@ -1,0 +1,21 @@
+{
+  "ssh": {
+    "program": "ssh",
+    "user": "u0",
+    "address": "192.0.2.10",
+    "port": 8022,
+    "identity_file": "/home/me/.ssh/coura_phone",
+    "known_hosts": "/home/me/.ssh/coura_known_hosts",
+    "remote_command": [
+      "python3",
+      "coura_remote.py",
+      "receive",
+      "--state",
+      "/data/data/com.termux/files/home/coura-phone",
+      "--expect-kind",
+      "phone",
+      "--expect-id",
+      "handset"
+    ]
+  }
+}

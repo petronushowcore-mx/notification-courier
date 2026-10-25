@@ -1,0 +1,13 @@
+{
+  "principal": "research-lead",
+  "delegate": "courier-delegate",
+  "key_id": "delegate-key-1",
+  "public_key_file": "delegate.pub",
+  "recipient": {"kind": "worker", "id": "writer"},
+  "request_kinds": ["note", "fixture.append"],
+  "targets": ["board"],
+  "not_before": 1700000000,
+  "not_after": 1800000000,
+  "policy_revision": "demo-1",
+  "note": "Operator worksheet only. receive does not load this file."
+}

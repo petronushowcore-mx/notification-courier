@@ -1,0 +1,16 @@
+{
+  "state_dir": "local-state-observer",
+  "transports": {
+    "worker": {"type": "inbox"}
+  },
+  "recipients": {
+    "alpha": {"client": "worker", "id": "alpha"},
+    "beta": {"client": "worker", "id": "beta"},
+    "agenda": {"client": "worker", "id": "agenda"}
+  },
+  "observer": {
+    "destination": "agenda",
+    "include_body": false,
+    "producer_id": "coura-local"
+  }
+}
