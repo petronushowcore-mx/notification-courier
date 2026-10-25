@@ -256,8 +256,8 @@
     },
     {
       "path": "tests/check_ux.py",
-      "bytes": 49583,
-      "sha256": "54c29ccd08e18be20153ef014d4bb5394dbed223b89c056f051f474637866f82"
+      "bytes": 49609,
+      "sha256": "b5f0a93dd93973fd798db6305147e47cd0a2ad7d2f03ab9adf875afda56b15bd"
     },
     {
       "path": "tests/check_v5_regressions.py",

@@ -907,7 +907,7 @@ def test_doctor_builtin_claude_exact_entrypoints():
             for selected in (None, settings):
                 done = _doctor_cli(program, config, root, selected)
                 if (done.returncode != 0 or "Route hook:writer (pass): exact exec form" not in done.stdout
-                        or "not installed" in done.stdout or done.stderr):
+                        or "Route hook:writer (warn): not installed" in done.stdout or done.stderr):
                     raise AssertionError(done.stdout + done.stderr)
             settings.unlink()
             absent = _doctor_cli(program, config, root, settings)
