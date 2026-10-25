@@ -525,13 +525,46 @@ def test_batch_bound_and_worker_stops():
         pending = json.loads(run([
             "--config", str(config), "observer-inspect", "--state", "pending"], root).stdout)
         assert pending["counts"]["pending"] == 3
-        proc = subprocess.Popen(
-            [sys.executable, "-B", str(SUBJECT), "--config", str(config),
-             "observer-run", "--interval", "0.4", "--batch", "1"],
-            cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        time.sleep(1.3)
-        proc.send_signal(signal.SIGTERM)
-        stdout, stderr = proc.communicate(timeout=10)
+        run_argv = ["--config", str(config), "observer-run", "--interval", "0.4", "--batch", "1"]
+        if os.name == "nt":
+            # On Windows send_signal(SIGTERM) is TerminateProcess: no Python handler runs. The child
+            # runs the real courier.main and raises SIGTERM in its own main thread after the first
+            # real sync, so the real handler, stop flag and summary are measured. A graceful stop on
+            # an external signal is not measured on Windows.
+            wrapper = root / "observer_run_then_term.py"
+            wrapper.write_text(textwrap.dedent("""
+                import importlib.util, json, signal, sys
+                subject, argv = sys.argv[1], json.loads(sys.argv[2])
+                spec = importlib.util.spec_from_file_location("courier", subject)
+                courier = importlib.util.module_from_spec(spec)
+                sys.modules["courier"] = courier
+                spec.loader.exec_module(courier)
+                observer = courier.load_observer_module()
+                real_sync, calls = observer.sync, []
+                def sync_then_term(*args, **kwargs):
+                    result = real_sync(*args, **kwargs)
+                    calls.append(1)
+                    if len(calls) == 1:
+                        signal.raise_signal(signal.SIGTERM)
+                    return result
+                observer.sync = sync_then_term
+                raise SystemExit(courier.main(argv))
+                """), encoding="utf-8")
+            proc = subprocess.Popen(
+                [sys.executable, "-B", str(wrapper), str(SUBJECT), json.dumps(run_argv)],
+                cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        else:
+            proc = subprocess.Popen(
+                [sys.executable, "-B", str(SUBJECT), *run_argv],
+                cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            time.sleep(1.3)
+            proc.send_signal(signal.SIGTERM)
+        try:
+            stdout, stderr = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise
         assert proc.returncode == 0, stderr
         stopped = json.loads(stdout)
         assert stopped["stopped"] is True

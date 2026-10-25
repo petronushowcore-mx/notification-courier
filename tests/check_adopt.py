@@ -144,8 +144,10 @@ def test_init_dry_run_and_merge():
         assert not (project / ".claude").exists()
         assert dry.stdout.startswith("---")
         assert "show" in dry.stdout and "writer" in dry.stdout
-        assert str(config.resolve()) in dry.stdout
-        assert sys.executable in dry.stdout
+        # The dry run prints a diff of the settings JSON: a Windows path appears with its
+        # backslashes escaped, so compare the JSON form of each value, not the raw string.
+        assert json.dumps(str(config.resolve()))[1:-1] in dry.stdout
+        assert json.dumps(sys.executable)[1:-1] in dry.stdout
         assert "'" in dry.stdout or '"' in dry.stdout
         settings.parent.mkdir(parents=True)
         original = {

@@ -165,11 +165,14 @@ def test_doctor_makes_no_changes():
             raise AssertionError("doctor changed the directory")
         text = "\n".join(item["fix"] for item in report["problems"])
         codes = [item["code"] for item in report["problems"]]
-        if "CAPTURE_FAILED" not in codes or "STATE_NOT_PRIVATE" not in codes:
+        # POSIX modes are checked on Unix only; on Windows ACLs are the operator's (LIMITS.md),
+        # so doctor must not claim a mode problem there.
+        posix = os.name != "nt"
+        if "CAPTURE_FAILED" not in codes or ("STATE_NOT_PRIVATE" in codes) != posix:
             raise AssertionError(codes)
         if coura_ux.explain("CAPTURE_FAILED") not in text:
             raise AssertionError(text)
-        if stat.S_IMODE(state.stat().st_mode) != 0o755:
+        if posix and stat.S_IMODE(state.stat().st_mode) != 0o755:
             raise AssertionError("doctor changed permissions")
         out = io.StringIO()
         if coura_ux.emit_doctor(report, out) == 0:
@@ -794,16 +797,36 @@ def _doctor_config(root, kind, command=None):
 
 
 def _doctor_executable(root):
-    # Linux execution fixture: argv[0] itself records ANY invocation, including --version.
+    # Execution fixture: argv[0] itself records ANY invocation, including --version.
     # A later script argument to python would not observe the doctor's version probe.
-    executable = root / "fixture-codex"
     sentinel = root / "invoked.txt"
-    executable.write_text("#!" + sys.executable + "\nfrom pathlib import Path\n" +
-                          "Path(" + repr(str(sentinel)) + ").write_text('invoked', encoding='utf-8')\n" +
-                          "print('fixture-codex 1')\n", encoding="utf-8")
-    executable.chmod(0o700)
+    body = ("from pathlib import Path\n" +
+            "Path(" + repr(str(sentinel)) + ").write_text('invoked', encoding='utf-8')\n" +
+            "print('fixture-codex 1')\n")
+    if os.name == "nt":
+        # Windows runs no shebang, and the queue route refuses .cmd/.bat wrappers: build a real
+        # console launcher the way pip installs a console script, with the recording body appended.
+        try:
+            from pip._vendor.distlib.scripts import ScriptMaker
+        except ImportError as error:
+            raise AssertionError("Windows executable fixture needs pip's distlib: %s" % error)
+        source = root / "fixture-source"
+        source.mkdir()
+        (source / "fixture-codex").write_text("#!python\n" + body, encoding="utf-8")
+        maker = ScriptMaker(str(source), str(root))
+        maker.executable = sys.executable
+        maker.add_launchers = True
+        maker.variants = {""}
+        made = [Path(path) for path in maker.make("fixture-codex") if path.lower().endswith(".exe")]
+        if len(made) != 1:
+            raise AssertionError("Windows executable fixture was not built: %r" % made)
+        executable = made[0]
+    else:
+        executable = root / "fixture-codex"
+        executable.write_text("#!" + sys.executable + "\n" + body, encoding="utf-8")
+        executable.chmod(0o700)
     if not executable.is_file() or not os.access(executable, os.X_OK):
-        raise AssertionError("executable fixture is not executable; native Windows is not covered")
+        raise AssertionError("executable fixture is not executable")
     control = subprocess.run([str(executable), "--version"], capture_output=True,
                              text=True, timeout=5)
     if control.returncode != 0 or not sentinel.exists() or sentinel.read_text() != "invoked":
@@ -813,12 +836,14 @@ def _doctor_executable(root):
 
 
 def _doctor_hook(root, config, program, alias="writer", foreign=False):
-    launcher = ROOT / "courier.py" if program.suffix != ".pyz" else program
+    launcher = ROOT / "courier.py" if program.suffix != ".pyz" else Path(program).resolve()
     if foreign:
         launcher = root / "another install" / launcher.name
     # Independent fixture argv: do not ask show_hook_spec, program_args or init for it.
+    # Paths are canonical, as the installer writes them: a temporary directory reached through
+    # a symlink (macOS /var -> /private/var) would otherwise differ from the resolved form.
     hook = {"type": "command", "command": sys.executable,
-            "args": [str(launcher), "--config", str(config), "show", alias], "timeout": 10}
+            "args": [str(launcher), "--config", str(Path(config).resolve()), "show", alias], "timeout": 10}
     return hook
 
 

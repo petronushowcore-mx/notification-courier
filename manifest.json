@@ -206,8 +206,8 @@
     },
     {
       "path": "tests/check_adopt.py",
-      "bytes": 46186,
-      "sha256": "ddb91cced7d7f550952985276745e1da1beed1993ea6ee15273539772a6760a9"
+      "bytes": 46403,
+      "sha256": "6c4ebc0554c23bcd8436e8f3cbc3eac75ca141c0242d08e982594600ab23ebc3"
     },
     {
       "path": "tests/check_configured.py",
@@ -226,8 +226,8 @@
     },
     {
       "path": "tests/check_observer.py",
-      "bytes": 27963,
-      "sha256": "9d09d32633492cb3f5e20fa4601164558687e9814ac522fd45f99b86c25f8e66"
+      "bytes": 29762,
+      "sha256": "30146cab38368e5e6434b537b73f9e1a4af8c09975678744e7f35840ddb63375"
     },
     {
       "path": "tests/check_observer_lens.py",
@@ -256,8 +256,8 @@
     },
     {
       "path": "tests/check_ux.py",
-      "bytes": 49609,
-      "sha256": "b5f0a93dd93973fd798db6305147e47cd0a2ad7d2f03ab9adf875afda56b15bd"
+      "bytes": 50992,
+      "sha256": "7c179cc0373420da04c3e13c29ad4e7d96ff4cfab0ba75bce3df64e35ea0c512"
     },
     {
       "path": "tests/check_v5_regressions.py",
