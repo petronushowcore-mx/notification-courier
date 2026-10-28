@@ -2,6 +2,7 @@
 import importlib.util
 import io
 import os
+import re
 import subprocess
 import threading
 import time
@@ -1849,6 +1850,212 @@ CHECKS.extend([
 ])
 
 REGRESSIONS.extend([("ordinary send reacquires its own lock", "        with file_lock(self.state / \"send\" / lock_key):\n            return self._send_locked(target, key, sender, note, delivery, carrier, data_only)", "        with file_lock(self.state / \"send\" / lock_key):\n            with file_lock(self.state / \"send\" / lock_key):\n                return self._send_locked(target, key, sender, note, delivery, carrier, data_only)", "ORDINARY_SEND_NO_SELF_LOCK"), ("recursive held fast path skips lock", "        with file_lock(self.state / \"send\" / lock_key):\n            return self._send_locked(target, key, sender, note, delivery, carrier, data_only)", "        early_hold = held_outcome(records(self.state / \"journal.jsonl\"), target, key)\n        if early_hold is not None and early_hold[\"status\"] == \"RESERVED\":\n            return Receipt(\"SKIPPED\", \"Premature reserved fast path\", held_status=\"RESERVED\")\n        with file_lock(self.state / \"send\" / lock_key):\n            return self._send_locked(target, key, sender, note, delivery, carrier, data_only)", "RECURSIVE_KEY_REFUSES"), ('reserved status omitted from replay fold', 'elif row.get("status") in TERMINAL | {"REQUESTED", "RESERVED"}:', 'elif row.get("status") in TERMINAL | {"REQUESTED"}:', 'RESERVED_IS_NOT_REPLAYED'), ("prehold recorded as callback", "                if type(adapter) is not Inbox and type(adapter) is not CodexQueue:\n                    append_record(journal, dict(base, ts=now(), status=\"RESERVED\"))", "                if type(adapter) is not Inbox and type(adapter) is not CodexQueue:\n                    append_record(journal, dict(base, ts=now(), status=\"REQUESTED\"))", "ADAPTER_RESERVATION_REQUIRED"), ('adapter type equality invoked before hold', 'if type(adapter) is not Inbox and type(adapter) is not CodexQueue:', 'if type(adapter) not in (Inbox, CodexQueue):', 'ADAPTER_TYPE_IDENTITY'), ('keyboard interruption releases attempt', '        except NotStarted as error:\n            not_started = type(adapter) is CodexQueue', '        except KeyboardInterrupt:\n            append_record(journal, dict(base, ts=now(), status="REFUSED", dispatch="NOT_STARTED"))\n            raise\n        except NotStarted as error:\n            not_started = type(adapter) is CodexQueue', 'KEYBOARD_INTERRUPT_PREHELD'), ("prehold refusal ignored", "                if type(adapter) is not Inbox and type(adapter) is not CodexQueue:\n                    append_record(journal, dict(base, ts=now(), status=\"RESERVED\"))", "                if type(adapter) is not Inbox and type(adapter) is not CodexQueue:\n                    try:\n                        append_record(journal, dict(base, ts=now(), status=\"RESERVED\"))\n                    except Refused:\n                        pass", "REFUSED_PREHOLD_BLOCKS_ENTRY"), ("CLI dispatch bypasses shared send lock", "receipt = courier.send(args.recipient, args.key, args.sender,\n                                       args.note, args.delivery)", "receipt = courier._send_locked(courier.resolve(args.recipient), args.key, args.sender,\n                                               args.note, args.delivery)", "CLI_SEND_SAME_KEY_SERIALISED")])
+
+
+# Text for a person on a stream that cannot encode it (a non-UTF-8 console or pipe).
+UNICODE_LETTER = "\u041f\u0440\u0438\u0432\u0435\u0442 \u2192 caf\u00e9 C:\\Users\\x \\u0416 \U0001f642 end"
+PLAIN_LETTER = "plain caf\u00e9 C:\\tmp line"
+
+
+ESCAPE_MARKER = "[escaped] "
+
+
+def _read_back(line):
+    """The documented reading of one shown line: a line that starts with the marker is escaped (a doubled
+    backslash, \\xNN, \\uNNNN, \\UNNNNNNNN); every other line is exactly as written."""
+    if not line.startswith(ESCAPE_MARKER):
+        return line
+    return re.sub(r"\\(\\|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8})",
+                  lambda found: "\\" if found.group(1) == "\\" else chr(int(found.group(1)[1:], 16)),
+                  line[len(ESCAPE_MARKER):])
+
+
+def _show_narrow(reader, target):
+    """show --text into a strict cp1252 stream; (None, None) when the stream refuses a character."""
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict", newline="\n")
+    try:
+        count = reader.show(target, out=stream, text=True)
+    except UnicodeEncodeError:
+        return None, None
+    stream.flush()
+    return count, stream.buffer.getvalue().decode("cp1252")
+
+
+def show_text_restrictive_stream_advances(m, root):
+    c = setup(m, root)
+    target = c.resolve("writer")
+    c.inbox(target, UNICODE_LETTER, lambda: None)
+    c.inbox(target, PLAIN_LETTER, lambda: None)
+    count, _ = _show_narrow(c.inbox, target)
+    require(count == 2)
+    require(c.inbox.show(target, out=io.StringIO(), text=True) == 0)
+
+
+def show_text_escaped_and_literal_lines_differ(m, root):
+    """The class: two different letters never show the same line, and each shown line reads back to its
+    letter. A character the stream lacks, the six ASCII code points of its escape spelling, and letters
+    that themselves begin with the marker."""
+    letters = ["Ж", "\\u0416", ESCAPE_MARKER + "\\u0416", ESCAPE_MARKER + "plain"]
+    c = setup(m, root)
+    target = c.resolve("writer")
+    for letter in letters:
+        c.inbox(target, letter, lambda: None)
+    count, shown = _show_narrow(c.inbox, target)
+    require(count == len(letters))
+    lines = shown.split("\n")[:-1]
+    require(len(set(lines)) == len(letters))
+    require([_read_back(line) for line in lines] == letters)
+
+
+def show_text_escape_is_lossless(m, root):
+    c = setup(m, root)
+    target = c.resolve("writer")
+    c.inbox(target, UNICODE_LETTER, lambda: None)
+    c.inbox(target, PLAIN_LETTER, lambda: None)
+    count, shown = _show_narrow(c.inbox, target)
+    require(count == 2)
+    lines = shown.split("\n")
+    require(len(lines) == 3)
+    escaped, plain, tail = lines
+    require(escaped != UNICODE_LETTER and _read_back(escaped) == UNICODE_LETTER and "caf\u00e9" in escaped)
+    require(plain == PLAIN_LETTER and tail == "")
+    c.inbox(target, UNICODE_LETTER, lambda: None)
+    output = io.StringIO()
+    require(c.inbox.show(target, out=output, text=True) == 1)
+    require(output.getvalue() == UNICODE_LETTER + "\n")
+
+
+class _FailingStream:
+    """A text stream whose write or flush fails, as when the reader of a pipe went away."""
+    encoding = "utf-8"
+
+    def __init__(self, fail):
+        self.fail = fail
+
+    def write(self, text):
+        if self.fail == "write":
+            raise BrokenPipeError("reader went away")
+        return len(text)
+
+    def flush(self):
+        if self.fail == "flush":
+            raise BrokenPipeError("reader went away")
+
+
+def show_text_failed_output_keeps_cursor(m, root):
+    c = setup(m, root)
+    target = c.resolve("writer")
+    c.inbox(target, UNICODE_LETTER, lambda: None)
+    paths = c.inbox.paths(target)
+
+    def cursor():
+        return [paths[part].read_bytes() if paths[part].exists() else None
+                for part in ("offset", "identity")]
+    before = cursor()
+    for fail in ("write", "flush"):
+        try:
+            c.inbox.show(target, out=_FailingStream(fail), text=True)
+        except OSError:
+            pass
+        else:
+            require(False)
+        require(cursor() == before)
+    output = io.StringIO()
+    require(c.inbox.show(target, out=output, text=True) == 1)
+    require(output.getvalue() == UNICODE_LETTER + "\n")
+
+
+def data_show_text_restrictive_stream_advances(m, root):
+    inbox = m.DataInbox(root)
+    target = m.Address("worker", "beta")
+    inbox(target, UNICODE_LETTER.encode("utf-8"), lambda: None, "0" * 32)
+    count, shown = _show_narrow(inbox, target)
+    require(count == 1 and shown.endswith("\n") and _read_back(shown[:-1]) == UNICODE_LETTER)
+    require(inbox.show(target, out=io.StringIO(), text=True) == 0)
+
+
+def _cli_narrow(m, root, *argv):
+    """Run this courier.py as a process whose stdout is strict cp1252."""
+    env = dict(os.environ, PYTHONIOENCODING="cp1252:strict")
+    env.pop("PYTHONUTF8", None)
+    done = subprocess.run([sys.executable, m.__file__, *argv], cwd=str(root), env=env,
+                          capture_output=True, timeout=60)
+    return done.returncode, done.stdout.decode("cp1252")
+
+
+def _claude_config(root):
+    path = root / "coura.json"
+    path.write_text(json.dumps({"state_dir": str(root / "state"),
+                                "recipients": {"writer": {"client": "claude", "id": A}}}),
+                    encoding="utf-8")
+    return path
+
+
+def show_text_cli_restrictive_stdout(m, root):
+    # The real process: stdout set by PYTHONIOENCODING, exit code and the cursor across two runs.
+    # Shadowed: every break of the escape or of the show call site reddens
+    # SHOW_TEXT_RESTRICTIVE_STREAM_ADVANCES first.
+    config = _claude_config(root)
+    m.Inbox(root / "state")(m.Address("claude", A), UNICODE_LETTER, lambda: None)
+    code, out = _cli_narrow(m, root, "--config", str(config), "show", "writer", "--text")
+    require(code == 0 and [_read_back(line) for line in out.splitlines()] == [UNICODE_LETTER])
+    require(_cli_narrow(m, root, "--config", str(config), "show", "writer", "--text") == (0, ""))
+
+
+def init_reported_on_a_restrictive_stdout(m, root):
+    config = _claude_config(root)
+    folder = "\u041f\u0430\u043f\u043a\u0430"
+    settings = root / folder / "settings.json"
+    code, out = _cli_narrow(m, root, "--config", str(config), "init", "--settings", str(settings))
+    lines = out.splitlines()
+    require(code == 0 and settings.exists() and len(lines) == 1)
+    require(_read_back(lines[0]).startswith("updated ") and folder in _read_back(lines[0]))
+
+
+CHECKS.extend([
+    ("SHOW_TEXT_RESTRICTIVE_STREAM_ADVANCES", show_text_restrictive_stream_advances),
+    ("SHOW_TEXT_ESCAPED_AND_LITERAL_LINES_DIFFER", show_text_escaped_and_literal_lines_differ),
+    ("SHOW_TEXT_ESCAPE_IS_LOSSLESS", show_text_escape_is_lossless),
+    ("SHOW_TEXT_FAILED_OUTPUT_KEEPS_CURSOR", show_text_failed_output_keeps_cursor),
+    ("DATA_SHOW_TEXT_RESTRICTIVE_STREAM_ADVANCES", data_show_text_restrictive_stream_advances),
+    ("SHOW_TEXT_CLI_RESTRICTIVE_STDOUT", show_text_cli_restrictive_stdout),
+    ("INIT_REPORTED_ON_A_RESTRICTIVE_STDOUT", init_reported_on_a_restrictive_stdout),
+])
+
+REGRESSIONS.extend([
+    ("text escape made strict", 'encoding, "backslashreplace").decode(encoding)',
+     'encoding, "strict").decode(encoding)', "SHOW_TEXT_RESTRICTIVE_STREAM_ADVANCES"),
+    ("inbox text bypasses the escape",
+     'print_text(out, "\\n".join(row["line"] for row in letters) + "\\n")',
+     'out.write("\\n".join(row["line"] for row in letters) + "\\n")',
+     "SHOW_TEXT_RESTRICTIVE_STREAM_ADVANCES"),
+    # without its marker an escaped line reads as a literal one, and two different letters show the same line
+    ("escaped line loses its marker", "            lines[index] = ESCAPED_LINE + line.replace(",
+     "            lines[index] = line.replace(", "SHOW_TEXT_ESCAPED_AND_LITERAL_LINES_DIFFER"),
+    ("a letter that begins with the marker is written as is",
+     "                if not line.startswith(ESCAPED_LINE):\n                    continue\n",
+     "                continue\n", "SHOW_TEXT_ESCAPED_AND_LITERAL_LINES_DIFFER"),
+    ("escaped backslash left single",
+     'ESCAPED_LINE + line.replace("%s", "%s").encode(' % ("\\" * 2, "\\" * 4),
+     "ESCAPED_LINE + line.encode(", "SHOW_TEXT_ESCAPED_AND_LITERAL_LINES_DIFFER"),
+    # over-firing: lines the stream can show as they are get marked and escaped too
+    ("every line is marked", "                if not line.startswith(ESCAPED_LINE):\n                    continue\n",
+     "", "SHOW_TEXT_ESCAPE_IS_LOSSLESS"),
+    ("encodable characters escaped too",
+     "                line.encode(encoding)\n                if not line.startswith(ESCAPED_LINE):",
+     '                line.encode("ascii")\n                if not line.startswith(ESCAPED_LINE):',
+     "SHOW_TEXT_ESCAPE_IS_LOSSLESS"),
+    ("failed write still commits the cursor", "    out.write(text)\n    out.flush()",
+     "    try:\n        out.write(text)\n    except OSError:\n        return\n    out.flush()",
+     "SHOW_TEXT_FAILED_OUTPUT_KEEPS_CURSOR"),
+    ("failed flush still commits the cursor", "    out.write(text)\n    out.flush()",
+     "    out.write(text)\n    try:\n        out.flush()\n    except OSError:\n        pass",
+     "SHOW_TEXT_FAILED_OUTPUT_KEEPS_CURSOR"),
+    ("data text bypasses the escape", 'print_text(out, "\\n\\n".join(self.payload_text(',
+     'out.write("\\n\\n".join(self.payload_text(', "DATA_SHOW_TEXT_RESTRICTIVE_STREAM_ADVANCES"),
+    ("init report printed raw", 'print_text(sys.stdout, "updated %s\\n" % path)',
+     'print("updated %s" % path, flush=True)', "INIT_REPORTED_ON_A_RESTRICTIVE_STDOUT"),
+])
 
 
 def run_checks(m):

@@ -139,6 +139,21 @@ does not authenticate a sender or remove prompt injection. Generic file inboxes
 emit data JSON and do not create ring files or hook context. `show --text` decodes
 UTF-8 for a person; the default `show` document is unchanged.
 
+Text for a person (`show --text`, `init`, `doctor`, `log`, `demo` and the guided
+commands) is written in the encoding of the output stream. A line that encoding
+cannot represent, as on a console or pipe that is not UTF-8, is written escaped
+instead of failing, and so is a line that itself begins with the reserved marker
+`[escaped] `. An escaped line is that marker followed by the line with its
+backslashes doubled and each missing character as a Python escape (`\xNN`,
+`\uNNNN`, `\UNNNNNNNN`). Every other line is written unchanged. The marker alone
+tells the two apart: a line without it is exactly the original, and a line with it
+reads back exactly by undoing the escapes. Nothing is dropped or replaced by a
+look-alike. A stream without an encoding, such as an in-memory one, receives the
+text unchanged. A pairing QR code drawn with block characters is readable only on
+a UTF-8 console. `show --text` advances the cursor only after the write and flush
+succeed; a write or flush error still fails the command, and the next `show` reads
+the same letters again.
+
 The built-in Codex queue parser concatenates stdout followed by stderr, strips surrounding whitespace
 and accepts one exact response shape. Extra stderr warnings also prevent acknowledgement.
 Extra non-whitespace output, changed CLI wording, a mismatched receiver or missing

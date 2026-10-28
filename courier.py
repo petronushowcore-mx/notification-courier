@@ -210,6 +210,33 @@ def try_file_lock(path):
         os.close(fd)
 
 
+ESCAPED_LINE = "[escaped] "
+
+
+def print_text(out, text):
+    """Write text for a person and flush. A line the stream cannot encode, and a line that
+    begins with the reserved marker ESCAPED_LINE, is written as that marker followed by the
+    line escaped: backslashes doubled, missing characters as \\xNN, \\uNNNN or \\UNNNNNNNN.
+    Every other line is written as is. The marker alone tells the two apart, and an escaped
+    line reads back exactly. Streams without an encoding take the text as is; write and flush
+    errors propagate."""
+    encoding = getattr(out, "encoding", None)
+    if encoding:
+        lines = text.split("\n")
+        for index, line in enumerate(lines):
+            try:
+                line.encode(encoding)
+                if not line.startswith(ESCAPED_LINE):
+                    continue
+            except UnicodeEncodeError:
+                pass
+            lines[index] = ESCAPED_LINE + line.replace("\\", "\\\\").encode(
+                encoding, "backslashreplace").decode(encoding)
+        text = "\n".join(lines)
+    out.write(text)
+    out.flush()
+
+
 def encoded_record(row, limit=MAX_RECORD):
     encoded = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
     if len(encoded) > limit:
@@ -401,8 +428,7 @@ class Inbox:
             if not letters:
                 return 0
             if text:
-                out.write("\n".join(row["line"] for row in letters) + "\n")
-                out.flush()
+                print_text(out, "\n".join(row["line"] for row in letters) + "\n")
                 self.save_cursor(paths["identity"], json.dumps(identity))
                 self.save_cursor(paths["offset"], str(end))
                 return len(letters)
@@ -599,10 +625,10 @@ class DataInbox(Inbox):
             if not rows:
                 return 0
             if text:
-                out.write("\n\n".join(self.payload_text(row["payload"]) for row in rows) + "\n")
+                print_text(out, "\n\n".join(self.payload_text(row["payload"]) for row in rows) + "\n")
             else:
                 out.write(json.dumps({"messages": rows}, ensure_ascii=True) + "\n")
-            out.flush()
+                out.flush()
             self.save_cursor(paths["identity"], json.dumps(identity))
             self.save_cursor(paths["offset"], str(end))
             return len(rows)
@@ -1534,26 +1560,26 @@ def init_claude_hook(args):
                 verb="host-event")
             changed = changed or end_changed
     except HookConflict as conflict:
-        print("# conflict: %s" % path, flush=True)
-        print("# config: %s" % Path(args.config).resolve(), flush=True)
-        print("# state_dir: %s" % courier.state, flush=True)
+        print_text(sys.stdout, "# conflict: %s\n" % path)
+        print_text(sys.stdout, "# config: %s\n" % Path(args.config).resolve())
+        print_text(sys.stdout, "# state_dir: %s\n" % courier.state)
         for kind, existing in conflict.found:
-            print("# %s hook left unchanged:" % kind, flush=True)
-            print(existing, flush=True)
+            print_text(sys.stdout, "# %s hook left unchanged:\n" % kind)
+            print_text(sys.stdout, "%s\n" % (existing,))
         raise Refused("Conflicting Coura %s hook was left unchanged" % conflict.verb) from conflict
     if args.dry_run:
         if not changed:
-            print("# unchanged: %s" % path, flush=True)
+            print_text(sys.stdout, "# unchanged: %s\n" % path)
             return
         diff = settings_diff(path, raw if path.exists() else "", render_settings(updated),
                              path.exists())
-        print(diff if diff else "# unchanged: %s" % path, end="" if diff else "\n", flush=True)
+        print_text(sys.stdout, diff if diff else "# unchanged: %s\n" % path)
         return
     if not changed:
-        print("unchanged %s" % path, flush=True)
+        print_text(sys.stdout, "unchanged %s\n" % path)
         return
     write_settings(path, render_settings(updated))
-    print("updated %s" % path, flush=True)
+    print_text(sys.stdout, "updated %s\n" % path)
 
 
 def clip_notify(text, limit):
@@ -1673,9 +1699,9 @@ def run_demo(out=None):
             },
             "lenses": {},
         }), encoding="utf-8")
-        out.write(_paint(out, "1", "coura demo") + "\n")
-        out.write("generic inbox  alpha -> beta\n")
-        out.write("temporary state  %s\n" % state)
+        print_text(out, _paint(out, "1", "coura demo") + "\n")
+        print_text(out, "generic inbox  alpha -> beta\n")
+        print_text(out, "temporary state  %s\n" % state)
         note = "Hello from the demo."
 
         def step(argv):
@@ -1693,18 +1719,17 @@ def run_demo(out=None):
 
         sent = step(["send", "beta", "--key", "demo/hello", "--sender", "alpha",
                      "--note", note, "--lens", "peer"])
-        out.write(_paint(out, "32", "send") + "  " + sent.strip() + "\n")
+        print_text(out, _paint(out, "32", "send") + "  " + sent.strip() + "\n")
         watched = step(["watch", "beta", "--timeout", "0"])
-        out.write(_paint(out, "32", "watch") + "  " + watched.strip() + "\n")
+        print_text(out, _paint(out, "32", "watch") + "  " + watched.strip() + "\n")
         shown = step(["show", "beta", "--text"])
-        out.write(_paint(out, "32", "show --text") + "\n" + shown)
+        print_text(out, _paint(out, "32", "show --text") + "\n" + shown)
         again = step(["send", "beta", "--key", "demo/hello", "--sender", "alpha",
                       "--note", note])
-        out.write(_paint(out, "33", "send again") + "  " + again.strip() + "\n")
+        print_text(out, _paint(out, "33", "send again") + "  " + again.strip() + "\n")
         if "SKIPPED" not in again or "MAIL_READY" not in watched or note not in shown:
             raise Refused("demo cycle did not complete")
-        out.write("removed temporary state\n")
-        out.flush()
+        print_text(out, "removed temporary state\n")
         return 0
     finally:
         holding.cleanup()
@@ -1925,7 +1950,7 @@ def _emit_doctor(args, checks):
               flush=True)
     else:
         for item in checks:
-            print("%-4s  %-18s  %s" % (item["status"], item["name"], item["detail"]), flush=True)
+            print_text(sys.stdout, "%-4s  %-18s  %s\n" % (item["status"], item["name"], item["detail"]))
     return 1 if failed else 0
 
 
@@ -1981,8 +2006,8 @@ def print_log(courier, args):
         return 0
     for row in rows:
         lens = row["lens"] if row["lens"] else "-"
-        print("%s  %s  %s  %s  %s  %s" % (
-            row["time"], row["from"], row["to"], row["status"], row["key"], lens), flush=True)
+        print_text(sys.stdout, "%s  %s  %s  %s  %s  %s\n" % (
+            row["time"], row["from"], row["to"], row["status"], row["key"], lens))
     return 0
 
 

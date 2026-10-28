@@ -49,8 +49,7 @@ def explain(code):
 
 
 def _say(out, text):
-    out.write(text + "\n")
-    out.flush()
+    courier.print_text(out, text + "\n")
 
 
 def _node_path(state):

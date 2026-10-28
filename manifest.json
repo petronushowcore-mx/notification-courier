@@ -61,13 +61,13 @@
     },
     {
       "path": "coura_ux.py",
-      "bytes": 30144,
-      "sha256": "fd0e1ef0b5dda37453ca6e08f0ee7803163c5897b058f16852d1da386130c6ee"
+      "bytes": 30142,
+      "sha256": "84164bec822b5ecc195ba744f957a60baecf92b44f415f48811940136ffcd51a"
     },
     {
       "path": "courier.py",
-      "bytes": 101133,
-      "sha256": "a4bdf94d86e31c83f4335619e4e55058d1cfc9fd450577ec9b87973605faa2b4"
+      "bytes": 102302,
+      "sha256": "5b351f47a881d25ece662a7a5d6435824387eb68557311cc43dfe12ef449e677"
     },
     {
       "path": "docs/mcp.md",
@@ -146,8 +146,8 @@
     },
     {
       "path": "LIMITS.md",
-      "bytes": 24833,
-      "sha256": "a0af1a7f1121a03fa8a70d1e1f75ec3e2190b873f440031ec6a0a2081d614938"
+      "bytes": 25901,
+      "sha256": "cb8b6f7e9ed76e0774e6c9937c19361e59a9e9084f84f2af389e29eaeca73f1d"
     },
     {
       "path": "meta_coura.py",
@@ -241,8 +241,8 @@
     },
     {
       "path": "tests/check_offline.py",
-      "bytes": 107524,
-      "sha256": "e026cc10d7fe75f79d75e1e2fd9376de6e4024295564abac45b023b321f8980b"
+      "bytes": 117090,
+      "sha256": "1c9f67dc2645efa52c58dd19012d143b4878357c6722499b6b6d0714035d9d41"
     },
     {
       "path": "tests/check_remote.py",
