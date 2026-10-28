@@ -46,8 +46,8 @@
     },
     {
       "path": "coura_mcp.py",
-      "bytes": 25118,
-      "sha256": "46f8a6d92cf066ef8b5fbcc03314516e33d19367fe8d2e8eb25fb8dc65887fa4"
+      "bytes": 25586,
+      "sha256": "20f159e58ccf5effe1074ef4c0515c3d203e59090e0ad91c55f7318b37746be8"
     },
     {
       "path": "coura_pair.py",
@@ -216,8 +216,8 @@
     },
     {
       "path": "tests/check_mcp.py",
-      "bytes": 32129,
-      "sha256": "0f9a2601489fbd45c7d3c43837bf461a8ac7c3c5744d2e2fbeaf3ce8d7d5398a"
+      "bytes": 34545,
+      "sha256": "de3f75c4705f37e7ea9db43cdc6545a5d537f60eef08d8f1bec8899be2f00d5d"
     },
     {
       "path": "tests/check_meta_coura.py",

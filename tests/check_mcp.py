@@ -391,6 +391,49 @@ class McpTests(unittest.TestCase):
             self.assertEqual(sent["structuredContent"]["status"], "STORED")
             self.assertEqual(payloads(state, "worker", "beta"), [b"Check retry from alpha. one"])
 
+    def _race(self, first_note, second_note):
+        """Two adapters over one state, as two MCP processes. The second reads the journal (its check outside the
+        core lock), then the first sends the same key to the end, then the second reaches the core: a fixed
+        interleaving of the race, not a timing one. -> (first result, second result, delivered payloads)."""
+        sys.path.insert(0, str(ROOT))
+        import coura_mcp
+        import courier
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            state = directory / "state"
+            config = write_config(directory, state)
+            first = coura_mcp.Adapter(courier.Courier.from_config(config), 4096, 30, 60, None)
+            second = coura_mcp.Adapter(courier.Courier.from_config(config), 4096, 30, 60, None)
+            read_journal, raced = second._prior, []
+
+            def prior_then_the_other_process(target, key, digest):
+                seen = read_journal(target, key, digest)
+                if not raced:
+                    raced.append(first.send({
+                        "recipient": "beta", "key": "race", "sender": "alpha", "note": first_note,
+                    }))
+                return seen
+
+            second._prior = prior_then_the_other_process
+            result = second.send({"recipient": "beta", "key": "race", "sender": "alpha", "note": second_note})
+            return raced[0], result, payloads(state, "worker", "beta")
+
+    def test_send_race_with_another_payload_is_refused(self):
+        won, lost, delivered = self._race("one", "two")
+        self.assertEqual(won["structuredContent"]["status"], "STORED")
+        self.assertTrue(lost["isError"])
+        self.assertEqual(lost["structuredContent"]["status"], "REFUSED")
+        self.assertIn("different payload", lost["structuredContent"]["detail"])
+        self.assertEqual(delivered, [b"Check race from alpha. one"])
+
+    def test_send_race_with_the_same_payload_replays(self):
+        won, lost, delivered = self._race("one", "one")
+        self.assertEqual(won["structuredContent"]["status"], "STORED")
+        self.assertFalse(lost["isError"])
+        self.assertIs(lost["structuredContent"]["idempotent_replay"], True)
+        self.assertEqual(lost["structuredContent"]["attempt_id"], won["structuredContent"]["attempt_id"])
+        self.assertEqual(delivered, [b"Check race from alpha. one"])
+
     def test_rate_table_drops_expired_senders_and_caps_distinct_senders(self):
         sys.path.insert(0, str(ROOT))
         import coura_mcp

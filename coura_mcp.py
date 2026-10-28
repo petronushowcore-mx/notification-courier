@@ -267,6 +267,13 @@ class Adapter:
                     "retry": False,
                 }, is_error=True)
             receipt = self.courier.send(recipient, key, sender, note)
+            if receipt.status == "SKIPPED":
+                # The check above read the journal outside the core's per-key lock: another process
+                # may have held this key between that read and this send. The core is the one writer
+                # of the held row, so the payload is compared again against what it now holds.
+                prior = self._prior(target, key, digest)
+                if prior is not None:
+                    return prior
             payload = receipt.as_dict()
             payload["idempotent_replay"] = False
             payload["retry"] = False
