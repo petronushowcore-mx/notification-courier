@@ -1,5 +1,6 @@
 """Usability commands, the one-file archive, and unchanged machine codes."""
 import base64
+import hashlib
 import io
 import json
 import os
@@ -179,6 +180,9 @@ def test_doctor_makes_no_changes():
             raise AssertionError("doctor hid problems")
 
 
+DESK = courier.Address("computer", "desk")
+
+
 def _pair_configs(root):
     computer_state = root / "computer" / "state"
     phone_state = root / "phone" / "state"
@@ -311,7 +315,7 @@ def test_pairing_wrong_expired_and_reused_codes():
         computer, phone = _pair_configs(root)
         code = coura_pair.create_offer(root / "computer" / "state", "computer", "desk", 600, 1_700_000_000)
         wrong = "ZZZZ-ZZZZ" if code != "ZZZZ-ZZZZ" else "YYYY-YYYY"
-        payload = coura_pair.join_payload(root / "phone" / "state", wrong, "phone", "handset")
+        payload = coura_pair.join_payload(root / "phone" / "state", wrong, "phone", "handset", DESK)
         try:
             coura_pair.review_join(root / "computer" / "state", payload, 1_700_000_000)
         except coura_pair.PairError as error:
@@ -326,7 +330,7 @@ def test_pairing_wrong_expired_and_reused_codes():
         (root / "computer" / "state" / "pairing" / "offer.json").write_text(
             json.dumps(offer), encoding="utf-8")
         expired_code = argparse_offer(computer, io.StringIO(), 1_700_000_000, 0)
-        expired = coura_pair.join_payload(root / "phone" / "state", expired_code, "phone", "handset")
+        expired = coura_pair.join_payload(root / "phone" / "state", expired_code, "phone", "handset", DESK)
         try:
             coura_pair.confirm_join(root / "computer" / "state", expired, 1_700_000_000)
         except coura_pair.PairError as error:
@@ -337,7 +341,7 @@ def test_pairing_wrong_expired_and_reused_codes():
         if json.loads((root / "computer" / "state" / "pairing" / "offer.json").read_text(encoding="utf-8"))["used"]:
             raise AssertionError("an expired code was spent")
         live = coura_pair.create_offer(root / "computer" / "state", "computer", "desk", 600, 1_700_000_000)
-        good = coura_pair.join_payload(root / "phone" / "state", live, "phone", "handset")
+        good = coura_pair.join_payload(root / "phone" / "state", live, "phone", "handset", DESK)
         coura_pair.confirm_join(root / "computer" / "state", good, 1_700_000_000)
         try:
             coura_pair.confirm_join(root / "computer" / "state", good, 1_700_000_000)
@@ -465,7 +469,7 @@ def test_second_offer_is_refused_and_the_error_is_readable():
             raise AssertionError(message)
         if json.loads(offer_path.read_text(encoding="utf-8"))["code_sha256"] != digest:
             raise AssertionError("a refused offer replaced the open code")
-        payload = coura_pair.join_payload(root / "phone" / "state", code, "phone", "handset")
+        payload = coura_pair.join_payload(root / "phone" / "state", code, "phone", "handset", DESK)
         preview = coura_pair.review_join(root / "computer" / "state", payload, 1_700_000_000)
         if preview["id"] != "handset":
             raise AssertionError("the first code no longer matches")
@@ -995,6 +999,281 @@ DOCTOR_TESTS = (
     test_doctor_builtin_generic_unchanged,
 )
 
+def _offer_and_join(root):
+    """desk offers a code and phone joins desk with it. Nothing travels: the predicate is local."""
+    desk, phone = root / "desk", root / "phone"
+    code = coura_pair.create_offer(desk, "computer", "desk", 600, 1_700_000_000)
+    join = coura_pair.join_payload(phone, code, "phone", "handset", DESK)
+    return desk, phone, code, join
+
+
+def _forged_reply(root, code, join_sha256, kind="computer", identity="desk"):
+    """A reply signed by a device that is not desk. It knows the code and names join_sha256."""
+    secret, public = coura_pair.ensure_identity(root / "evil")
+    body = {"schema": coura_pair.ACCEPT_SCHEMA, "code": coura_pair.normalize_code(code),
+            "address": {"kind": kind, "id": identity}, "public_key": public.hex()}
+    if join_sha256 is not None:
+        body["join_sha256"] = join_sha256
+    return coura_pair._sign_body(body, secret)
+
+
+def _accept_refused(state, reply):
+    try:
+        coura_pair.confirm_accept(state, reply)
+    except coura_pair.PairError:
+        return True
+    return False
+
+
+def _trusted_peers(state):
+    path = coura_pair._peers_path(state)
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def test_pairing_reply_trusted_once_and_replay_cannot_replace_the_key():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        desk, phone, code, join = _offer_and_join(root)
+        reply = coura_pair.confirm_join(desk, join, 1_700_000_000)
+        coura_pair.confirm_accept(phone, reply)
+        trusted = _trusted_peers(phone)
+        desk_key = coura_pair.ensure_identity(desk)[1].hex()
+        if trusted.get(coura_pair.peer_key("computer", "desk"), {}).get("public_key") != desk_key:
+            raise AssertionError("the reply to this join was not trusted")
+        forged = _forged_reply(root, code, hashlib.sha256(join).hexdigest())
+        if not _accept_refused(phone, reply) or not _accept_refused(phone, forged):
+            raise AssertionError("a reply after the finished pairing was accepted")
+        if _trusted_peers(phone) != trusted:
+            raise AssertionError("a reply after the finished pairing changed trust")
+
+
+def test_pairing_reply_to_another_join_is_refused():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        desk, phone, code, _join = _offer_and_join(root)
+        other = coura_pair.join_payload(root / "other", code, "phone", "other", DESK)
+        reply = coura_pair.confirm_join(desk, other, 1_700_000_000)
+        if not _accept_refused(phone, reply) or _trusted_peers(phone):
+            raise AssertionError("a reply to another join with the same code was trusted")
+
+
+def test_pairing_reply_without_this_join_is_refused():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        _desk, phone, code, _join = _offer_and_join(root)
+        guessed = coura_pair.join_payload(root / "evil", code, "phone", "handset", DESK)
+        for join_sha256 in (None, hashlib.sha256(guessed).hexdigest()):
+            if not _accept_refused(phone, _forged_reply(root, code, join_sha256)):
+                raise AssertionError("a reply that does not name this join was trusted")
+        if _trusted_peers(phone):
+            raise AssertionError("a reply that does not name this join changed trust")
+
+
+def test_pairing_reply_from_another_device_is_refused():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        _desk, phone, code, join = _offer_and_join(root)
+        forged = _forged_reply(root, code, hashlib.sha256(join).hexdigest(), "computer", "other")
+        if not _accept_refused(phone, forged) or _trusted_peers(phone):
+            raise AssertionError("a reply from a device this phone did not join was trusted")
+
+def _answered_join(root):
+    """desk offered, the phone joined desk and desk answered: one reply waits in the phone's inbox."""
+    computer, phone = _pair_configs(root)
+    code = argparse_offer(computer, io.StringIO(), 1_700_000_000, 600)
+    joined = namespace(phone, confirm=False, now=1_700_000_000)
+    joined.code, joined.to, joined.pair_command = code, "desk", "join"
+    coura_ux._pair_join(joined, io.StringIO())
+    coura_ux._pair_confirm(namespace(computer, confirm=True, now=1_700_000_000), io.StringIO())
+    return computer, phone, code
+
+
+def _cli_refused(command, args):
+    try:
+        command(args, io.StringIO())
+    except coura_pair.PairError:
+        return True
+    return False
+
+
+def test_pairing_a_repeated_message_from_the_same_key_is_trusted_on_both_sides():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        computer, phone = _pair_configs(root)
+        code = argparse_offer(computer, io.StringIO(), 1_700_000_000, 600)
+        joined = namespace(phone, confirm=False, now=1_700_000_000)
+        joined.code, joined.to, joined.pair_command = code, "desk", "join"
+        coura_ux._pair_join(joined, io.StringIO())
+        joins = coura_ux._schema_payloads(root / "computer" / "state", coura_pair.JOIN_SCHEMA)
+        plant(root / "computer" / "state", "computer", "desk", joins[-1], "99" * 16)
+        if coura_ux._pair_confirm(namespace(computer, confirm=True, now=1_700_000_000), io.StringIO()) != 0:
+            raise AssertionError("the same join, delivered twice, was not answered")
+        replies = coura_ux._schema_payloads(root / "phone" / "state", coura_pair.ACCEPT_SCHEMA)
+        plant(root / "phone" / "state", "phone", "handset", replies[-1], "88" * 16)
+        if coura_ux._pair_finish(namespace(phone, confirm=True, now=1_700_000_000), io.StringIO()) != 0:
+            raise AssertionError("the same reply, delivered twice, was not trusted")
+        desk_key = coura_pair.ensure_identity(root / "computer" / "state")[1].hex()
+        if _trusted_peers(root / "phone" / "state")[coura_pair.peer_key("computer", "desk")]["public_key"] != desk_key:
+            raise AssertionError("a repeated reply trusted another key")
+
+
+def test_pairing_unrelated_messages_do_not_refuse_an_honest_pair():
+    """Only a join for the open offer from a routed address, and only a reply to this device's own
+    join, are counted: an old code, a message without a valid signature, or a join from an address
+    with no route stays out of the count and cannot refuse the honest pair."""
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        computer, phone = _pair_configs(root)
+        code = argparse_offer(computer, io.StringIO(), 1_700_000_000, 600)
+        joined = namespace(phone, confirm=False, now=1_700_000_000)
+        joined.code, joined.to, joined.pair_command = code, "desk", "join"
+        coura_ux._pair_join(joined, io.StringIO())
+        old_code = "ZZZZ-ZZZZ" if code != "ZZZZ-ZZZZ" else "YYYY-YYYY"
+        for index, payload in enumerate((
+                coura_pair.join_payload(root / "evil", old_code, "phone", "handset", DESK),
+                b'{"schema":"coura.pair.join.v1","code":"%s"}' % code.encode("ascii"),
+                coura_pair.join_payload(root / "evil", code, "phone", "stranger", DESK))):
+            plant(root / "computer" / "state", "computer", "desk", payload, "%02d" % index * 16)
+        if coura_ux._pair_confirm(namespace(computer, confirm=True, now=1_700_000_000), io.StringIO()) != 0:
+            raise AssertionError("an unrelated join refused the honest pair")
+        for index, payload in enumerate((
+                _forged_reply(root, old_code, None),
+                b'{"schema":"coura.pair.accept.v1","code":"%s"}' % code.encode("ascii"))):
+            plant(root / "phone" / "state", "phone", "handset", payload, "%02d" % (index + 5) * 16)
+        if coura_ux._pair_finish(namespace(phone, confirm=True, now=1_700_000_000), io.StringIO()) != 0:
+            raise AssertionError("an unrelated reply refused the honest pair")
+        desk_key = coura_pair.ensure_identity(root / "computer" / "state")[1].hex()
+        if _trusted_peers(root / "phone" / "state")[coura_pair.peer_key("computer", "desk")]["public_key"] != desk_key:
+            raise AssertionError("the honest pair did not trust desk's key")
+
+
+def test_pairing_a_second_key_after_the_preview_is_refused_on_both_sides():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        _computer, phone, code = _answered_join(root)
+        coura_ux._pair_finish(namespace(phone, confirm=False, now=1_700_000_000), io.StringIO())
+        pending = json.loads((root / "phone" / "state" / "pairing" / "pending.json").read_text(encoding="utf-8"))
+        plant(root / "phone" / "state", "phone", "handset",
+              _forged_reply(root, code, pending["join_sha256"]), "66" * 16)
+        if not _cli_refused(coura_ux._pair_finish, namespace(phone, confirm=True, now=1_700_000_000)):
+            raise AssertionError("pair finish trusted a second key that arrived after the preview")
+        if _trusted_peers(root / "phone" / "state"):
+            raise AssertionError("a second key after the finish preview changed trust")
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        computer, phone = _pair_configs(root)
+        code = argparse_offer(computer, io.StringIO(), 1_700_000_000, 600)
+        joined = namespace(phone, confirm=False, now=1_700_000_000)
+        joined.code, joined.to, joined.pair_command = code, "desk", "join"
+        coura_ux._pair_join(joined, io.StringIO())
+        coura_ux._pair_confirm(namespace(computer, confirm=False, now=1_700_000_000), io.StringIO())
+        other = coura_pair.join_payload(root / "evil", code, "phone", "handset", DESK)
+        plant(root / "computer" / "state", "computer", "desk", other, "77" * 16)
+        if not _cli_refused(coura_ux._pair_confirm, namespace(computer, confirm=True, now=1_700_000_000)):
+            raise AssertionError("pair confirm answered a second join that arrived after the preview")
+        if _trusted_peers(root / "computer" / "state"):
+            raise AssertionError("a second join after the confirm preview changed trust")
+
+
+def _two_keys_refused(command, args, keys, what):
+    try:
+        command(args, io.StringIO())
+    except coura_pair.PairError as error:
+        if not all(key in str(error) for key in keys):
+            raise AssertionError("%s refused without naming both keys in full: %s" % (what, error))
+        return
+    raise AssertionError("%s trusted one of two keys" % what)
+
+
+def test_pairing_two_keys_without_a_preview_are_refused_on_both_sides():
+    """--confirm without a preview leaves previewed_key unset, so no shown key holds the answer:
+    only key uniqueness stands between two answering keys and trust. Both are refused, and the
+    refusal names both keys in full, since the person compares full keys."""
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        _computer, phone, code = _answered_join(root)
+        pending = json.loads((root / "phone" / "state" / "pairing" / "pending.json").read_text(encoding="utf-8"))
+        plant(root / "phone" / "state", "phone", "handset",
+              _forged_reply(root, code, pending["join_sha256"]), "66" * 16)
+        keys = (coura_pair.ensure_identity(root / "computer" / "state")[1].hex(),
+                coura_pair.ensure_identity(root / "evil")[1].hex())
+        _two_keys_refused(coura_ux._pair_finish, namespace(phone, confirm=True, now=1_700_000_000), keys,
+                             "pair finish --confirm without a preview")
+        if _trusted_peers(root / "phone" / "state"):
+            raise AssertionError("two keys without a preview changed trust on the phone")
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        computer, phone = _pair_configs(root)
+        code = argparse_offer(computer, io.StringIO(), 1_700_000_000, 600)
+        joined = namespace(phone, confirm=False, now=1_700_000_000)
+        joined.code, joined.to, joined.pair_command = code, "desk", "join"
+        coura_ux._pair_join(joined, io.StringIO())
+        plant(root / "computer" / "state", "computer", "desk",
+              coura_pair.join_payload(root / "evil", code, "phone", "handset", DESK), "77" * 16)
+        keys = (coura_pair.ensure_identity(root / "phone" / "state")[1].hex(),
+                coura_pair.ensure_identity(root / "evil")[1].hex())
+        _two_keys_refused(coura_ux._pair_confirm, namespace(computer, confirm=True, now=1_700_000_000), keys,
+                             "pair confirm --confirm without a preview")
+        if _trusted_peers(root / "computer" / "state"):
+            raise AssertionError("two joins without a preview changed trust on the computer")
+
+
+def test_pairing_one_key_in_two_hex_spellings_is_one_key():
+    """A key is compared by value: the same key in lower and in UPPER hex, each message validly signed, is one
+    key. No two-key refusal, a preview of one spelling trusts the other, and trust stores one spelling."""
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        desk, phone, _code, join = _offer_and_join(root)
+        lower = coura_pair.confirm_join(desk, join, 1_700_000_000)
+        secret, public = coura_pair.ensure_identity(desk)
+        document = json.loads(lower.decode("utf-8"))
+        document.pop("signature")
+        document["public_key"] = public.hex().upper()
+        upper = coura_pair._sign_body(document, secret)
+        try:
+            coura_ux._first_accepted([lower, upper], lambda item: coura_pair.review_accept(phone, item))
+        except coura_pair.PairError as error:
+            raise AssertionError("one key in two hex spellings was refused as two keys: %s" % error)
+        coura_pair.note_accept_preview(phone, lower)
+        try:
+            coura_pair.confirm_accept(phone, upper)
+        except coura_pair.PairError as error:
+            raise AssertionError("a preview of one spelling refused the same key in the other: %s" % error)
+        if _trusted_peers(phone)[coura_pair.peer_key("computer", "desk")]["public_key"] != public.hex():
+            raise AssertionError("the trusted key is not stored in one spelling")
+
+
+def test_pairing_finish_trusts_only_the_key_it_showed():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        desk, phone, code, join = _offer_and_join(root)
+        reply = coura_pair.confirm_join(desk, join, 1_700_000_000)
+        coura_pair.note_accept_preview(phone, reply)
+        if not _accept_refused(phone, _forged_reply(root, code, hashlib.sha256(join).hexdigest())):
+            raise AssertionError("a key other than the one pair finish showed was trusted")
+        if _trusted_peers(phone):
+            raise AssertionError("a key other than the one shown changed trust")
+        coura_pair.confirm_accept(phone, reply)
+        desk_key = coura_pair.ensure_identity(desk)[1].hex()
+        if _trusted_peers(phone)[coura_pair.peer_key("computer", "desk")]["public_key"] != desk_key:
+            raise AssertionError("the key that was shown was not trusted")
+
+
+def test_pairing_confirm_replies_only_to_the_key_it_showed():
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        desk, _phone, code, join = _offer_and_join(root)
+        coura_pair.note_join_preview(desk, join, 1_700_000_000)
+        other = coura_pair.join_payload(root / "evil", code, "phone", "handset", DESK)
+        try:
+            coura_pair.reply_to_join(desk, other, 1_700_000_000)
+        except coura_pair.PairError:
+            pass
+        else:
+            raise AssertionError("a reply was built for a join whose key pair confirm did not show")
+        coura_pair.reply_to_join(desk, join, 1_700_000_000)
+
+
 def main():
     print(BEFORE)
     tests = [
@@ -1007,6 +1286,17 @@ def main():
         test_doctor_makes_no_changes,
         test_pairing_confirms_both_sides_and_hides_the_secret,
         test_pairing_wrong_expired_and_reused_codes,
+        test_pairing_reply_trusted_once_and_replay_cannot_replace_the_key,
+        test_pairing_reply_to_another_join_is_refused,
+        test_pairing_reply_without_this_join_is_refused,
+        test_pairing_reply_from_another_device_is_refused,
+        test_pairing_a_repeated_message_from_the_same_key_is_trusted_on_both_sides,
+        test_pairing_unrelated_messages_do_not_refuse_an_honest_pair,
+        test_pairing_a_second_key_after_the_preview_is_refused_on_both_sides,
+        test_pairing_two_keys_without_a_preview_are_refused_on_both_sides,
+        test_pairing_one_key_in_two_hex_spellings_is_one_key,
+        test_pairing_finish_trusts_only_the_key_it_showed,
+        test_pairing_confirm_replies_only_to_the_key_it_showed,
         test_status_and_autostart,
         test_machine_codes_and_json_stay_unchanged,
         test_second_offer_is_refused_and_the_error_is_readable,

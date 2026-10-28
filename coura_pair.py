@@ -2,7 +2,9 @@
 
 Secret keys stay on the device that created them. A pairing message carries
 an address, a public key, and a signature. The short code is the human check
-that both sides are looking at the same exchange.
+that both sides are looking at the same exchange. A reply names the digest of
+the exact join it answers; the joining device trusts it only for the device it
+joined, and only once.
 """
 import hashlib
 import json
@@ -297,11 +299,20 @@ def _open_signed(payload):
     body = {key: value for key, value in document.items() if key != "signature"}
     if not verify(public, canonical(body), signature):
         raise PairError("Pairing signature did not verify")
+    # The verified key has one spelling from here on: lower and UPPER hex of the same key are one key for
+    # counting, preview and trust.
+    document["public_key"] = public.hex()
     return document
 
 
-def join_payload(state, code, kind, identity):
+def join_payload(state, code, kind, identity, peer):
+    """Sign a join for the device at peer. pending.json keeps the digest of these exact bytes
+    and the peer's address, so only a reply to this join from that device can be trusted."""
     address = courier.Address(kind, identity)
+    try:
+        peer = courier.Address(peer.client, peer.identity)
+    except AttributeError:
+        raise PairError("Pairing needs the address of the device you are joining")
     secret, public = ensure_identity(state)
     body = {
         "schema": JOIN_SCHEMA,
@@ -309,12 +320,16 @@ def join_payload(state, code, kind, identity):
         "address": {"kind": address.client, "id": address.identity},
         "public_key": public.hex(),
     }
-    _write_json(_pending_path(state), {
-        "code_sha256": _code_hash(code),
-        "kind": address.client,
-        "id": address.identity,
-    })
-    return _sign_body(body, secret)
+    payload = _sign_body(body, secret)
+    with _pairing_lock(state):
+        _write_json(_pending_path(state), {
+            "code_sha256": _code_hash(code),
+            "kind": address.client,
+            "id": address.identity,
+            "peer": {"kind": peer.client, "id": peer.identity},
+            "join_sha256": hashlib.sha256(payload).hexdigest(),
+        })
+    return payload
 
 
 def _matching_alias(instance, address):
@@ -354,16 +369,31 @@ def review_join(state, payload, now):
     }
 
 
+def note_join_preview(state, payload, now):
+    """Check a join and remember the key a person was shown; a reply goes only to that key."""
+    with _pairing_lock(state):
+        preview = review_join(state, payload, now)
+        offer = _read_json(_offer_path(state), {})
+        offer["previewed_key"] = preview["public_key"]
+        _write_json(_offer_path(state), offer)
+        return preview
+
+
 def reply_to_join(state, payload, now):
-    """Check a join and build the signed reply. This does not trust or spend."""
+    """Check a join and build the signed reply. This does not trust or spend. A join whose key is
+    not the one pair confirm showed gets no reply."""
     preview = review_join(state, payload, now)
     offer = _read_json(_offer_path(state), {})
+    if offer.get("previewed_key") not in (None, preview["public_key"]):
+        raise PairError("The join's key is not the one pair confirm showed. "
+                        "Trust nothing; start the pairing again.")
     secret, public = ensure_identity(state)
     body = {
         "schema": ACCEPT_SCHEMA,
         "code": normalize_code(json.loads(payload.decode("utf-8"))["code"]),
         "address": {"kind": offer["kind"], "id": offer["id"]},
         "public_key": public.hex(),
+        "join_sha256": hashlib.sha256(payload).hexdigest(),
     }
     return preview, _sign_body(body, secret)
 
@@ -431,24 +461,49 @@ def review_accept(state, payload):
     pending = _read_json(_pending_path(state), {})
     if not pending:
         raise PairError("This device has not entered a pairing code")
+    if pending.get("used") is True:
+        raise PairError("This pairing is already finished. A reply cannot change trust again.")
     if _code_hash(document.get("code", "")) != pending.get("code_sha256"):
         raise PairError("The reply is for a different pairing code")
+    if (type(pending.get("join_sha256")) is not str or
+            document.get("join_sha256") != pending["join_sha256"]):
+        raise PairError("The reply does not answer the join this device sent")
     address = document.get("address")
     if type(address) is not dict:
         raise PairError("Pairing address is missing")
     courier.Address(address.get("kind"), address.get("id"))
+    if pending.get("peer") != {"kind": address["kind"], "id": address["id"]}:
+        raise PairError("The reply comes from a different device than the one this device joined")
     return {"kind": address["kind"], "id": address["id"], "public_key": document["public_key"]}
 
 
-def confirm_accept(state, payload):
+def note_accept_preview(state, payload):
+    """Check a reply and remember the key a person was shown; only that key can be trusted."""
     with _pairing_lock(state):
         preview = review_accept(state, payload)
+        pending = _read_json(_pending_path(state), {})
+        pending["previewed_key"] = preview["public_key"]
+        _write_json(_pending_path(state), pending)
+        return preview
+
+
+def confirm_accept(state, payload):
+    """Trust the reply's key once. A key other than the one pair finish showed is refused, and
+    the spent pending join refuses every later reply."""
+    with _pairing_lock(state):
+        preview = review_accept(state, payload)
+        pending = _read_json(_pending_path(state), {})
+        if pending.get("previewed_key") not in (None, preview["public_key"]):
+            raise PairError("The reply's key is not the one pair finish showed. "
+                            "Trust nothing; start the pairing again.")
         peers = _trusted_peers(state)
         peers[peer_key(preview["kind"], preview["id"])] = {
             "kind": preview["kind"], "id": preview["id"],
             "public_key": preview["public_key"], "confirmed": True,
         }
         _write_json(_peers_path(state), peers)
+        pending["used"] = True
+        _write_json(_pending_path(state), pending)
         return preview
 
 

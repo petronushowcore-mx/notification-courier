@@ -436,6 +436,7 @@ def _pair_offer(args, out):
     instance = courier.Courier.from_config(args.config)
     kind, identity = _load_node(instance.state, args.kind, args.id)
     code = coura_pair.create_offer(instance.state, kind, identity, args.ttl, args.now)
+    _say(out, "This device's public key: %s" % coura_pair.ensure_identity(instance.state)[1].hex())
     _say(out, "Pairing code: %s" % code)
     _say(out, "Type this code on the other device. It expires and works once.")
     _say(out, coura_pair.qr_text("coura:" + code))
@@ -445,7 +446,9 @@ def _pair_offer(args, out):
 def _pair_join(args, out):
     instance = courier.Courier.from_config(args.config)
     kind, identity = _load_node(instance.state, args.kind, args.id)
-    payload = coura_pair.join_payload(instance.state, args.code, kind, identity)
+    payload = coura_pair.join_payload(instance.state, args.code, kind, identity,
+                                      instance.resolve(args.to))
+    _say(out, "This device's public key: %s" % coura_pair.ensure_identity(instance.state)[1].hex())
     receipt = instance.send_data(args.to, "pair-join-" + coura_pair._code_hash(args.code)[:16],
                                  payload, data_only=True)
     if receipt.status == "SKIPPED" and receipt.held_status == "STORED":
@@ -485,30 +488,45 @@ def _schema_payloads(state, schema):
 
 
 def _first_accepted(payloads, accept):
-    """Newest payload that accept() allows. Older valid messages stay reachable."""
-    error = None
+    """Newest payload that accept() allows. Older valid messages stay reachable. When the allowed
+    messages carry more than one public key, none is chosen: the person compares one key, and
+    another key that arrives before or after that look must not be trusted in its place."""
+    error, allowed = None, []
     for payload in reversed(payloads):
         try:
-            accept(payload)
+            allowed.append((payload, accept(payload)["public_key"]))
         except coura_pair.PairError as exc:
             if error is None:
                 error = exc
-            continue
-        return payload
+    keys = sorted({key for _payload, key in allowed})
+    if len(keys) > 1:
+        raise coura_pair.PairError(
+            "%d different keys answer this pairing: %s. Trust none of them; start the pairing again."
+            % (len(keys), ", ".join(keys)))
+    if allowed:
+        return allowed[0][0]
     if error is not None:
         raise error
     return None
+
+
+def _relevant_join(instance, payload, now):
+    """A join for the open offer from an address this node has a route to. A join that cannot be
+    answered is not counted, so it cannot refuse an honest pairing."""
+    preview = coura_pair.review_join(instance.state, payload, now)
+    coura_pair._matching_alias(instance, {"kind": preview["kind"], "id": preview["id"]})
+    return preview
 
 
 def _pair_confirm(args, out):
     instance = courier.Courier.from_config(args.config)
     payload = _first_accepted(
         _schema_payloads(instance.state, coura_pair.JOIN_SCHEMA),
-        lambda item: coura_pair.review_join(instance.state, item, args.now))
+        lambda item: _relevant_join(instance, item, args.now))
     if payload is None:
         raise courier.Refused("No pairing join has arrived in the local inbox")
     if not args.confirm:
-        preview = coura_pair.review_join(instance.state, payload, args.now)
+        preview = coura_pair.note_join_preview(instance.state, payload, args.now)
         _say(out, "Join from %s:%s" % (preview["kind"], preview["id"]))
         _say(out, "Public key: %s" % preview["public_key"])
         _say(out, "Not trusted. Run pair confirm --confirm to trust this peer and reply.")
@@ -555,7 +573,7 @@ def _pair_finish(args, out):
     if payload is None:
         raise courier.Refused("No pairing reply has arrived in the local inbox")
     if not args.confirm:
-        preview = coura_pair.review_accept(instance.state, payload)
+        preview = coura_pair.note_accept_preview(instance.state, payload)
         _say(out, "Reply from %s:%s" % (preview["kind"], preview["id"]))
         _say(out, "Public key: %s" % preview["public_key"])
         _say(out, "Not trusted. Run pair finish --confirm to save it.")

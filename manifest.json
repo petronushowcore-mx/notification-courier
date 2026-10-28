@@ -51,8 +51,8 @@
     },
     {
       "path": "coura_pair.py",
-      "bytes": 23227,
-      "sha256": "438df6fb01e2fa35ebbe5e17358cf53bc571068ced3f4521dafe72a3b76b6a98"
+      "bytes": 26293,
+      "sha256": "cb8ebaafa51fbb04e2cf07f4b4c437fa274564445cacbc2ff44fd541c93283c4"
     },
     {
       "path": "coura_remote.py",
@@ -61,8 +61,8 @@
     },
     {
       "path": "coura_ux.py",
-      "bytes": 30142,
-      "sha256": "84164bec822b5ecc195ba744f957a60baecf92b44f415f48811940136ffcd51a"
+      "bytes": 31307,
+      "sha256": "7a3fcf238cec422e0dbfe650bb0052aab44ac87692c37405b3cff1915a6fa424"
     },
     {
       "path": "courier.py",
@@ -81,8 +81,8 @@
     },
     {
       "path": "docs/quickstart.md",
-      "bytes": 4486,
-      "sha256": "b1b86ad708d6e67e8b1a523abc9f8cddf5f2b81a0d5fdd8c479944be4ecf564a"
+      "bytes": 4849,
+      "sha256": "b4a8923042adea42cf0b02253c6c8579d14af8945e48c9486be6339d4550e05c"
     },
     {
       "path": "docs/remote.md",
@@ -146,8 +146,8 @@
     },
     {
       "path": "LIMITS.md",
-      "bytes": 25901,
-      "sha256": "cb8b6f7e9ed76e0774e6c9937c19361e59a9e9084f84f2af389e29eaeca73f1d"
+      "bytes": 27015,
+      "sha256": "44c16046d30bad8d90de108db7850746e4121f6426b8519456a79122d6c765d9"
     },
     {
       "path": "meta_coura.py",
@@ -251,13 +251,13 @@
     },
     {
       "path": "tests/check_state_boundaries.py",
-      "bytes": 16987,
-      "sha256": "dcaf61fcc79ea20737e7db837bfff964bd3c402bd3b962d5c59768477c3af3cc"
+      "bytes": 17043,
+      "sha256": "cbf81971b18503804e5c7cd369538f6e3f4c46eb4f8359a1c78f5c72dd55e860"
     },
     {
       "path": "tests/check_ux.py",
-      "bytes": 50992,
-      "sha256": "7c179cc0373420da04c3e13c29ad4e7d96ff4cfab0ba75bce3df64e35ea0c512"
+      "bytes": 67518,
+      "sha256": "889efbbbc8e8beb9a771ce75773fce549eb8e5ccf973b6b64f985b0d4bb40134"
     },
     {
       "path": "tests/check_v5_regressions.py",

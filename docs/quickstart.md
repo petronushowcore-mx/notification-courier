@@ -87,6 +87,11 @@ python3 coura.pyz pair finish --confirm --config coura.json
 ```
 
 Without `--confirm`, Coura shows the public key and does not save a peer.
+`pair offer` and `pair join` print this device's own public key: compare it
+with the key the other device shows before you pass `--confirm`. A reply is
+trusted once, and only for the join this device sent to the device named by
+`--to`. If a different key answers after you looked, or two keys answer the same
+pairing, nothing is trusted: start the pairing again.
 A second `pair offer` does not replace a code that is still open. If the
 reply's acknowledgement is missing, confirm says so and still records the
 peer on this device, because that key is held. If the reply is refused,

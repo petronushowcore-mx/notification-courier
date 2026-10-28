@@ -147,7 +147,7 @@ def full_pair_address(modules):
         root = Path(folder); desk = root/"desk"
         for kind in ("phone", "worker"):
             code = p.create_offer(desk, "computer", "desk", 600, 1700000000)
-            payload = p.join_payload(root/kind, code, kind, "same")
+            payload = p.join_payload(root/kind, code, kind, "same", c.Address("computer", "desk"))
             p.commit_join(desk, payload, 1700000000)
         rows = json.loads(p._peers_path(desk).read_text())
         need(set(rows) == {p.peer_key("phone", "same"), p.peer_key("worker", "same")}
@@ -156,7 +156,7 @@ def full_pair_address(modules):
         for kind in ("phone", "worker"):
             offer_state = root/("offer-"+kind)
             code = p.create_offer(offer_state, kind, "same", 600, 1700000000)
-            payload = p.join_payload(joined, code, "computer", "joined")
+            payload = p.join_payload(joined, code, "computer", "joined", c.Address(kind, "same"))
             reply = p.confirm_join(offer_state, payload, 1700000000)
             p.confirm_accept(joined, reply)
         rows = json.loads(p._peers_path(joined).read_text())

@@ -341,7 +341,22 @@ key after both sides pass `--confirm`; the secret key stays in
 pairing code expires and works once. A second offer does not replace an open
 code. Confirm records the peer when the reply is stored, and also when the
 acknowledgement is missing, because that key is held. A refused reply does
-not record the peer. Pairing failures print their own sentence. `autostart
+not record the peer. A reply names the SHA-256 of the exact join it answers.
+`pair finish` trusts a reply only if it answers the join this device sent, to
+the device named by `pair join --to`, and only once: after `pair finish
+--confirm` every further reply is refused and cannot change the trusted key. A
+join entered before this check existed must be entered again. The reply's
+signature proves possession of the key it carries, not that the key belongs to
+the device you meant: the join carries the code in clear, so a party that reads
+the join in transit can still answer it first. `pair offer` and `pair join`
+print this device's public key; compare it with the key the other device shows
+before passing `--confirm`. `pair confirm --confirm` and `pair finish --confirm`
+trust only the key that their preview without `--confirm` showed, and none at
+all when two different keys answer the same pairing: then start the pairing
+again. A Coura from before this check neither sends nor checks the join digest:
+this version refuses its reply, and such a device does not check this version's
+reply, so update both devices before pairing. Pairing failures print their own
+sentence. `autostart
 --print` only prints scheduler text. `tests/check_ux.py` runs `observer-sync`
 from the archive on this computer. It does not measure Termux.
 
